@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   deploy:
-    runs-on: [self-hosted, kubernetes, org]
+    runs-on: ps-runner
 
     env:
       PROJECT_ID: ${{ inputs.project_id }}
@@ -30,19 +30,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      # ---- GCP Auth (OIDC)
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/POOL_ID/providers/PROVIDER_ID
-          service_account: github-ci@${{ inputs.project_id }}.iam.gserviceaccount.com
-
-      - uses: google-github-actions/setup-gcloud@v2
-
-      # ---- Docker Auth
-      - name: Configure Docker
-        run: gcloud auth configure-docker $ARTIFACT_REGISTRY --quiet
 
       # ---- Lint
       - name: Apigee Lint
