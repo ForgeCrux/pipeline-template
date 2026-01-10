@@ -1,0 +1,86 @@
+name: Reusable Apigee CI/CD (K8s Runner)
+
+on:
+  workflow_call:
+    inputs:
+      apigee_org:
+        required: true
+        type: string
+      apigee_env:
+        required: true
+        type: string
+      deploy_proxy:
+        required: true
+        type: string
+      node_version:
+        required: false
+        default: '18'
+        type: string
+    secrets:
+      APIGEE_TOKEN:
+        required: true
+      SONAR_TOKEN:
+        required: true
+
+jobs:
+  build-lint-deploy:
+    runs-on:
+      - self-hosted
+      - kubernetes
+      - apigee-runner
+
+    steps:
+      # 1. Checkout source
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Setup Node.js
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      # 3. Install tools
+      - name: Install linting tools
+        run: |
+          npm install -g apigeelint eslint sonarqube-scanner
+
+      # 4. Apigee lint
+      - name: Run Apigee Lint
+        run: |
+          apigeelint -s apiproxy -f table.js
+
+      # 5. JS lint
+      - name: Run JavaScript Lint
+        run: |
+          eslint apiproxy/resources/jsc --ext .js
+
+      # 6. Sonar scan
+      - name: Sonar Scan
+        run: |
+          sonar-scanner \
+            -Dsonar.projectKey=${{ github.repository }} \
+            -Dsonar.sources=apiproxy
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # 7. Package proxy
+      - name: Package Apigee Proxy
+        run: |
+          zip -r proxy.zip apiproxy
+
+      # 8. Import proxy (Apigee Management API)
+      - name: Import API Proxy
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.APIGEE_TOKEN }}" \
+            -H "Content-Type: multipart/form-data" \
+            -F file=@proxy.zip \
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis?action=import&name=${{ inputs.deploy_proxy }}"
+
+      # 9. Deploy proxy
+      - name: Deploy API Proxy
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.APIGEE_TOKEN }}" \
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/apis/${{ inputs.deploy_proxy }}/revisions/1/deployments"
