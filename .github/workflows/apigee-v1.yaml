@@ -28,6 +28,9 @@ jobs:
       - self-hosted
       - kubernetes
       - apigee-runner
+    
+    container:
+      image: us-central1-docker.pkg.dev/methodical-mark-482504-j3/ps-apigee-ci/apigee-ci:1.0.0
 
     steps:
       # 1. Checkout source
