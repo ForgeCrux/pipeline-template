@@ -27,37 +27,44 @@ jobs:
     runs-on:
       - self-hosted
       - kubernetes
-    
+      - org-runner
+
+    # 🔥 Job-level container (pulled from Artifact Registry)
     container:
       image: us-central1-docker.pkg.dev/methodical-mark-482504-j3/ps-apigee-ci/apigee-ci:1.0.0
 
     steps:
-      # 1. Checkout source
+      # 1️⃣ Authenticate Docker to Artifact Registry
+      - name: Configure Docker for GAR
+        run: |
+          gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      # 2️⃣ Checkout source
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Setup Node.js
+      # 3️⃣ Setup Node.js
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node_version }}
 
-      # 3. Install tools
+      # 4️⃣ Install linting tools
       - name: Install linting tools
         run: |
           npm install -g apigeelint eslint sonarqube-scanner
 
-      # 4. Apigee lint
+      # 5️⃣ Apigee lint
       - name: Run Apigee Lint
         run: |
           apigeelint -s apiproxy -f table.js
 
-      # 5. JS lint
+      # 6️⃣ JS lint
       - name: Run JavaScript Lint
         run: |
           eslint apiproxy/resources/jsc --ext .js
 
-      # 6. Sonar scan
+      # 7️⃣ Sonar scan
       - name: Sonar Scan
         run: |
           sonar-scanner \
@@ -66,12 +73,12 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      # 7. Package proxy
+      # 8️⃣ Package proxy
       - name: Package Apigee Proxy
         run: |
           zip -r proxy.zip apiproxy
 
-      # 8. Import proxy (Apigee Management API)
+      # 9️⃣ Import proxy
       - name: Import API Proxy
         run: |
           curl -X POST \
@@ -80,7 +87,7 @@ jobs:
             -F file=@proxy.zip \
             "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis?action=import&name=${{ inputs.deploy_proxy }}"
 
-      # 9. Deploy proxy
+      # 🔟 Deploy proxy
       - name: Deploy API Proxy
         run: |
           curl -X POST \
