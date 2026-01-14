@@ -25,6 +25,9 @@ on:
 jobs:
   get-token:
     runs-on: [self-hosted, kubernetes, org-runner]
+    permissions:
+      contents: 'read'
+      id-token: 'write'
     outputs:
       registry_token: ${{ steps.auth.outputs.access_token }}
     steps:
