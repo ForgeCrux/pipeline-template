@@ -23,11 +23,22 @@ on:
         required: true
 
 jobs:
+  get-token:
+    runs-on: [self-hosted, kubernetes, org-runner]
+    outputs:
+      registry_token: ${{ steps.auth.outputs.access_token }}
+    steps:
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          # Use the Service Account linked via Workload Identity earlier
+          service_account: 'gh-runner-gsa@methodical-mark-482504-j3.iam.gserviceaccount.com'
+          token_format: 'access_token'
+          workload_identity_provider: 'projects/1076618220242/locations/global/workloadIdentityPools/forgecrux-pool/providers/github-provider'
+  
   build-lint-deploy:
-    runs-on:
-      - self-hosted
-      - kubernetes
-      - org-runner
+    needs: get-token
+    runs-on: [self-hosted, kubernetes, org-runner]
 
     # 🔥 Job-level container (pulled from Artifact Registry)
     container:
