@@ -62,7 +62,7 @@ jobs:
             bash -c "
               ls -la && pwd
               apigeelint -s apiproxy -f table.js &&
-              sonar-scanner \
+              /usr/local/bin/sonar-scanner \
                 -Dsonar.projectKey=${{ github.repository }} \
                 -Dsonar.sources=apiproxy \
                 -Dsonar.login=${{ secrets.SONAR_TOKEN }} &&
