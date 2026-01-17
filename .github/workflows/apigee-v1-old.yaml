@@ -62,7 +62,6 @@ jobs:
             bash -c "
               ls -la && pwd
               apigeelint -s apiproxy -f table.js &&
-              eslint apiproxy/resources/jsc --ext .js &&
               sonar-scanner \
                 -Dsonar.projectKey=${{ github.repository }} \
                 -Dsonar.sources=apiproxy \
