@@ -60,6 +60,7 @@ jobs:
             -e ACCESS_TOKEN="${{ steps.auth.outputs.access_token }}" \
             us-central1-docker.pkg.dev/methodical-mark-482504-j3/ps-apigee-ci/ps-apigee-cicd:2.0.1 \
             bash -c "
+              ls -la && pwd
               npm install -g apigeelint eslint sonarqube-scanner &&
               apigeelint -s apiproxy -f table.js &&
               eslint apiproxy/resources/jsc --ext .js &&
