@@ -58,7 +58,7 @@ jobs:
             -v "$PWD:/workspace" \
             -w /workspace \
             -e ACCESS_TOKEN="${{ steps.auth.outputs.access_token }}" \
-            us-central1-docker.pkg.dev/methodical-mark-482504-j3/ps-apigee-ci/apigee-ci:2.0.1 \
+            us-central1-docker.pkg.dev/methodical-mark-482504-j3/ps-apigee-ci/ps-apigee-cicd:2.0.1 \
             bash -c "
               npm install -g apigeelint eslint sonarqube-scanner &&
               apigeelint -s apiproxy -f table.js &&
