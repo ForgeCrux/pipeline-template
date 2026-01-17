@@ -1,0 +1,79 @@
+name: Reusable Apigee CI/CD (K8s Runner)
+
+on:
+  workflow_call:
+    inputs:
+      apigee_org:
+        required: true
+        type: string
+      apigee_env:
+        required: true
+        type: string
+      deploy_proxy:
+        required: true
+        type: string
+      node_version:
+        required: false
+        default: '18'
+        type: string
+    secrets:
+      SONAR_TOKEN:
+        required: true
+
+jobs:
+  build-lint-deploy:
+    runs-on: [self-hosted, kubernetes, org-runner]
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 🔐 Authenticate via Workload Identity
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          service_account: gh-runner-gsa@methodical-mark-482504-j3.iam.gserviceaccount.com
+          token_format: access_token
+          workload_identity_provider: projects/1076618220242/locations/global/workloadIdentityPools/forgecrux-pool/providers/github-provider
+
+      # 🔑 Docker auth for Artifact Registry
+      - name: Configure Docker
+        run: |
+          gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      # 🐳 Run CI inside the Apigee container
+      - name: Run Apigee CI
+        run: |
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            -e ACCESS_TOKEN="${{ steps.auth.outputs.access_token }}" \
+            us-central1-docker.pkg.dev/methodical-mark-482504-j3/ps-apigee-ci/apigee-ci:2.0.1 \
+            bash -c "
+              npm install -g apigeelint eslint sonarqube-scanner &&
+              apigeelint -s apiproxy -f table.js &&
+              eslint apiproxy/resources/jsc --ext .js &&
+              sonar-scanner \
+                -Dsonar.projectKey=${{ github.repository }} \
+                -Dsonar.sources=apiproxy \
+                -Dsonar.login=${{ secrets.SONAR_TOKEN }} &&
+              zip -r proxy.zip apiproxy
+            "
+
+      # 🚀 Import proxy
+      - name: Import API Proxy
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
+            -F file=@proxy.zip \
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis?action=import&name=${{ inputs.deploy_proxy }}"
+
+      # 🚀 Deploy proxy
+      - name: Deploy API Proxy
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" \
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/apis/${{ inputs.deploy_proxy }}/revisions/1/deployments"
