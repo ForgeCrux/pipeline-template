@@ -30,6 +30,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      
+      - name: Verify GCP identity
+        run: |
+          gcloud auth list
+          gcloud config list account
 
       # 🔐 Authenticate via Workload Identity
       - id: auth
