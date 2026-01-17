@@ -46,7 +46,7 @@ jobs:
 
     # 🔥 Job-level container (pulled from Artifact Registry)
     container:
-      image: us-central1-docker.pkg.dev/methodical-mark-482504-j3/ps-apigee-ci/apigee-ci:2.0.1
+      image: us-central1-docker.pkg.dev/methodical-mark-482504-j3/ps-apigee-ci/ps-apigee-cicd:2.0.1
 
     steps:
       # 1️⃣ Authenticate Docker to Artifact Registry
