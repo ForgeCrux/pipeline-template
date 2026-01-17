@@ -30,6 +30,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - uses: google-github-actions/setup-gcloud@v2
       
       - name: Verify GCP identity
         run: |
