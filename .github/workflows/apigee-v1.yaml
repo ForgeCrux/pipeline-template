@@ -60,11 +60,18 @@ jobs:
         run: |
           npm install -g apigeelint eslint sonarqube-scanner
 
+       # 6️⃣ Checkout lint rules
+      - name: Checkout lint rules
+        uses: actions/checkout@v4
+        with:
+          repository: ForgeCrux/apigee-linting-custom
+          ref: develop
+          path: apigee-linting-custom
+      
       # 6️⃣ Apigee Lint
       - name: Apigee Lint
         run: |
           set -e
-          git clone https://github.com/ForgeCrux/apigee-linting-custom.git -b develop
           apigeelint -s apiproxy -p apigee-linting-custom/rules -f table.js
 
       # 7️⃣ JavaScript Lint
