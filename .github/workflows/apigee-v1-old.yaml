@@ -60,7 +60,7 @@ jobs:
             -e ACCESS_TOKEN="${{ steps.auth.outputs.access_token }}" \
             us-central1-docker.pkg.dev/methodical-mark-482504-j3/ps-apigee-ci/ps-apigee-cicd:2.0.2 \
             bash -c "
-              ls -la && pwd
+              ls -la && pwd && ls -la ../
               apigeelint -s apiproxy -p ./rules -f table.js &&
               /usr/local/bin/sonar-scanner \
                 -Dsonar.projectKey=${{ github.repository }} \
