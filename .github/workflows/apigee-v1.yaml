@@ -23,30 +23,30 @@ on:
         required: true
 
 jobs:
-  get-token:
-    runs-on: [self-hosted, kubernetes, org-runner]
-    permissions:
-      contents: 'read'
-      id-token: 'write'
-    outputs:
-      registry_token: ${{ steps.auth.outputs.access_token }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          # Use the Service Account linked via Workload Identity earlier
-          service_account: 'gh-runner-gsa@methodical-mark-482504-j3.iam.gserviceaccount.com'
-          token_format: 'access_token'
-          workload_identity_provider: 'projects/1076618220242/locations/global/workloadIdentityPools/forgecrux-pool/providers/github-provider'
+  #get-token:
+  #  runs-on: [self-hosted, kubernetes, org-runner]
+  #  permissions:
+  #    contents: 'read'
+  #    id-token: 'write'
+  #  outputs:
+  #    registry_token: ${{ steps.auth.outputs.access_token }}
+  #  steps:
+  #    - uses: actions/checkout@v4
+  #    - id: auth
+  #      uses: google-github-actions/auth@v2
+  #      with:
+  #        # Use the Service Account linked via Workload Identity earlier
+  #        service_account: 'gh-runner-gsa@methodical-mark-482504-j3.iam.gserviceaccount.com'
+  #        token_format: 'access_token'
+  #        workload_identity_provider: 'projects/1076618220242/locations/global/workloadIdentityPools/forgecrux-pool/providers/github-provider'
   
   build-lint-deploy:
-    needs: get-token
+    #needs: get-token
     runs-on: [self-hosted, kubernetes, org-runner]
 
     # 🔥 Job-level container (pulled from Artifact Registry)
-    container:
-      image: us-central1-docker.pkg.dev/methodical-mark-482504-j3/ps-apigee-ci/ps-apigee-cicd:2.0.1
+    #container:
+    #  image: us-central1-docker.pkg.dev/methodical-mark-482504-j3/ps-apigee-ci/ps-apigee-cicd:2.0.1
 
     steps:
       # 1️⃣ Authenticate Docker to Artifact Registry
