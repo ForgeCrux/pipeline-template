@@ -17,95 +17,104 @@ on:
         default: '18'
         type: string
     secrets:
-      APIGEE_TOKEN:
-        required: true
       SONAR_TOKEN:
         required: true
 
-jobs:
-  #get-token:
-  #  runs-on: [self-hosted, kubernetes, org-runner]
-  #  permissions:
-  #    contents: 'read'
-  #    id-token: 'write'
-  #  outputs:
-  #    registry_token: ${{ steps.auth.outputs.access_token }}
-  #  steps:
-  #    - uses: actions/checkout@v4
-  #    - id: auth
-  #      uses: google-github-actions/auth@v2
-  #      with:
-  #        # Use the Service Account linked via Workload Identity earlier
-  #        service_account: 'gh-runner-gsa@methodical-mark-482504-j3.iam.gserviceaccount.com'
-  #        token_format: 'access_token'
-  #        workload_identity_provider: 'projects/1076618220242/locations/global/workloadIdentityPools/forgecrux-pool/providers/github-provider'
-  
-  build-lint-deploy:
-    #needs: get-token
-    runs-on: [self-hosted, kubernetes, org-runner]
+permissions:
+  contents: read
+  id-token: write   # REQUIRED for Workload Identity
 
-    # 🔥 Job-level container (pulled from Artifact Registry)
-    #container:
-    #  image: us-central1-docker.pkg.dev/methodical-mark-482504-j3/ps-apigee-ci/ps-apigee-cicd:2.0.1
+jobs:
+  build-lint-deploy:
+    runs-on: [self-hosted, kubernetes, org-runner]
+    timeout-minutes: 30
 
     steps:
-      # 1️⃣ Authenticate Docker to Artifact Registry
-      #- name: Configure Docker for GAR
-      #  run: |
-      #    gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
-
-      # 2️⃣ Checkout source
+      # 1️⃣ Checkout
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 3️⃣ Setup Node.js
+      # 2️⃣ Authenticate to GCP via Workload Identity
+      - name: GCP Auth (OIDC)
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1076618220242/locations/global/workloadIdentityPools/forgecrux-pool/providers/github-provider
+          service_account: gh-runner-gsa@methodical-mark-482504-j3.iam.gserviceaccount.com
+          token_format: access_token
+
+      # 3️⃣ Setup Node
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node_version }}
 
-      # 4️⃣ Install linting tools
-      - name: Install linting tools
+      # 4️⃣ Cache npm
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ inputs.node_version }}
+
+      # 5️⃣ Install tooling
+      - name: Install tools
         run: |
           npm install -g apigeelint eslint sonarqube-scanner
 
-      # 5️⃣ Apigee lint
-      - name: Run Apigee Lint
+      # 6️⃣ Apigee Lint
+      - name: Apigee Lint
         run: |
-          git clone https://ProbeStack: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@github.com/ForgeCrux/apigee-linting-custom.git -b develop 
-          apigeelint -s ./apiproxy -p ./apigee-linting-custom/rules -f table.js
+          set -e
+          git clone https://github.com/ForgeCrux/apigee-linting-custom.git -b develop
+          apigeelint -s apiproxy -p apigee-linting-custom/rules -f table.js
 
-      # 6️⃣ JS lint
-      - name: Run JavaScript Lint
+      # 7️⃣ JavaScript Lint
+      - name: JS Lint
         run: |
+          set -e
           eslint apiproxy/resources/jsc --ext .js
 
-      # 7️⃣ Sonar scan
+      # 8️⃣ Sonar Scan
       - name: Sonar Scan
-        run: |
-          sonar-scanner \
-            -Dsonar.projectKey=${{ github.repository }} \
-            -Dsonar.sources=apiproxy
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-      # 8️⃣ Package proxy
-      - name: Package Apigee Proxy
         run: |
+          sonar-scanner \
+            -Dsonar.projectKey=${{ github.repository_owner }}_${{ github.event.repository.name }} \
+            -Dsonar.sources=apiproxy
+
+      # 9️⃣ Package Proxy
+      - name: Package Proxy
+        run: |
+          test -d apiproxy
           zip -r proxy.zip apiproxy
 
-      # 9️⃣ Import proxy
-      - name: Import API Proxy
+      # 🔟 Import Proxy
+      - name: Import Proxy
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
-          curl -X POST \
-            -H "Authorization: Bearer ${{ secrets.APIGEE_TOKEN }}" \
-            -H "Content-Type: multipart/form-data" \
+          curl -sf -X POST \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
             -F file=@proxy.zip \
             "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis?action=import&name=${{ inputs.deploy_proxy }}"
 
-      # 🔟 Deploy proxy
-      - name: Deploy API Proxy
+      # 1️⃣1️⃣ Get Latest Revision
+      - name: Get Revision
+        id: revision
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
-          curl -X POST \
-            -H "Authorization: Bearer ${{ secrets.APIGEE_TOKEN }}" \
-            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/apis/${{ inputs.deploy_proxy }}/revisions/1/deployments"
+          REV=$(curl -s \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}/revisions" \
+            | jq -r '.[-1]')
+          echo "revision=$REV" >> $GITHUB_OUTPUT
+
+      # 1️⃣2️⃣ Deploy Proxy
+      - name: Deploy Proxy
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          curl -sf -X POST \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/apis/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments"
