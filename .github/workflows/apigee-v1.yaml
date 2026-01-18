@@ -50,9 +50,9 @@ jobs:
 
     steps:
       # 1️⃣ Authenticate Docker to Artifact Registry
-      - name: Configure Docker for GAR
-        run: |
-          gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+      #- name: Configure Docker for GAR
+      #  run: |
+      #    gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
       # 2️⃣ Checkout source
       - name: Checkout repository
