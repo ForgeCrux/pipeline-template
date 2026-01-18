@@ -58,10 +58,10 @@ jobs:
             -v "$PWD:/workspace" \
             -w /workspace \
             -e ACCESS_TOKEN="${{ steps.auth.outputs.access_token }}" \
-            us-central1-docker.pkg.dev/methodical-mark-482504-j3/ps-apigee-ci/ps-apigee-cicd:2.0.1 \
+            us-central1-docker.pkg.dev/methodical-mark-482504-j3/ps-apigee-ci/ps-apigee-cicd:2.0.2 \
             bash -c "
               ls -la && pwd
-              apigeelint -s apiproxy -f table.js &&
+              apigeelint -s apiproxy -p ./rules -f table.js &&
               /usr/local/bin/sonar-scanner \
                 -Dsonar.projectKey=${{ github.repository }} \
                 -Dsonar.sources=apiproxy \
