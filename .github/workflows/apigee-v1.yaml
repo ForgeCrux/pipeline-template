@@ -72,7 +72,7 @@ jobs:
       # 5️⃣ Apigee lint
       - name: Run Apigee Lint
         run: |
-          git clone https://ProbeStack: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@github.com/ForgeCrux/apigee-linting-custom.git -b develop 
+          git clone https://ProbeStack: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@github.com/ForgeCrux/apigee-linting-custom.git -b develop 
           apigeelint -s ./apiproxy -p ./apigee-linting-custom/rules -f table.js
 
       # 6️⃣ JS lint
