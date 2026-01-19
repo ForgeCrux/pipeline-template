@@ -85,6 +85,7 @@ jobs:
       - name: Apigee Lint
         run: |
           set -e
+          ls -la 
           apigeelint -s apiproxy -p apigee-linting-custom/rules -f table.js
 
       # 7️⃣ JavaScript Lint
