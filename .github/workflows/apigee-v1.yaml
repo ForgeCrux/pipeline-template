@@ -59,6 +59,8 @@ jobs:
       - name: Install tools
         run: |
           npm install -g apigeelint eslint sonarqube-scanner
+          echo "Github PAT" : ${{ secrets.GH_TOKEN }}
+          echo "Sonar Token" :${{ secrets.SONAR_TOKEN }}
 
        # 6️⃣ Checkout lint rules
       - name: Checkout lint rules
