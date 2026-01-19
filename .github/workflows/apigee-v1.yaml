@@ -1,6 +1,10 @@
 name: Reusable Apigee CI/CD (K8s Runner)
 
 on:
+  push:
+    branches:
+      - main
+      
   workflow_call:
     inputs:
       apigee_org:
