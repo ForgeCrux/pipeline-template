@@ -67,6 +67,11 @@ jobs:
           echo "Github PAT" : ${{ secrets.GH_TOKEN }}
           echo "Sonar Token" :${{ secrets.SONAR_TOKEN }}
 
+      - name: Verify token access
+        run: |
+          curl -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+               https://api.github.com/repos/ForgeCrux/apigee-linting-custom
+
        # 6️⃣ Checkout lint rules
       - name: Checkout lint rules
         uses: actions/checkout@v4
