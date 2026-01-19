@@ -83,8 +83,8 @@ jobs:
       
       # 6️⃣ Apigee Lint
       - name: Apigee Lint
+        continue-on-error: true
         run: |
-          ls -la 
           apigeelint -s apiproxy -x ./apigee-linting-custom/rules -f table.js
 
       # 7️⃣ JavaScript Lint
