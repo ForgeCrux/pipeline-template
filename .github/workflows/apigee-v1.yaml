@@ -137,6 +137,8 @@ jobs:
         env:
           ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
-          curl -sf -X POST \
+          RESPONSE=$(curl -s -X POST \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
-            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/apis/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments"
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/apis/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments")
+      
+          echo "Deployment response: $RESPONSE"
