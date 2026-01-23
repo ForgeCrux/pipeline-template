@@ -100,7 +100,8 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           sonar-scanner \
-            -Dsonar.projectKey=${{ github.repository_owner }}_${{ github.event.repository.name }} \
+            -Dsonar.organization=forgecrux
+            -Dsonar.projectKey=${{ github.event.repository.name }} \
             -Dsonar.sources=apiproxy
 
       # 9️⃣ Package Proxy
