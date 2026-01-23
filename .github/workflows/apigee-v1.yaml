@@ -126,7 +126,7 @@ jobs:
         env:
           ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
-          REV=$(curl -i -H "Authorization: Bearer $ACCESS_TOKEN" "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}/revisions" | jq -r '.[-1]')
+          REV=$(curl -i -H "Authorization: Bearer $ACCESS_TOKEN" "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}/revisions" | jq -r 'map(tonumber) | max')
           echo "revision=$REV" >> $GITHUB_OUTPUT
 
       # 1️⃣2️⃣ Deploy Proxy
