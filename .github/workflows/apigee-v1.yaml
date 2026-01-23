@@ -127,7 +127,7 @@ jobs:
           ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
           ls -la && jq --version
-          REV=$(curl -i -H "Authorization: Bearer $ACCESS_TOKEN" \ 
+          REV=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \ 
           "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}/revisions" \
           | jq -r 'map(tonumber) | max')
           echo "revision=$REV" >> $GITHUB_OUTPUT
