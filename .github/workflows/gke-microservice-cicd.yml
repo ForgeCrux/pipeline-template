@@ -1,0 +1,138 @@
+name: Reusable CI/CD - Microservice Deploy to GKE
+
+on:
+  workflow_call:
+    inputs:
+      project_id:
+        required: true
+        type: string
+      cluster_name:
+        required: true
+        type: string
+      cluster_region:
+        required: true
+        type: string
+      service_name:
+        required: true
+        type: string
+      image_name:
+        required: true
+        type: string
+      java_version:
+        required: false
+        type: string
+        default: "17"
+    secrets:
+      GCP_SA_KEY:
+        required: true
+
+jobs:
+  build-and-test:
+    runs-on: [self-hosted, kubernetes, org-runner]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.java_version }}
+          distribution: temurin
+          cache: maven
+
+      - name: Build
+        run: mvn clean compile -B
+
+      - name: Test
+        run: mvn test -B
+        continue-on-error: true
+
+      - name: Package
+        run: mvn package -DskipTests -B
+
+  deploy:
+    needs: build-and-test
+    runs-on: [self-hosted, kubernetes, org-runner]
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 🔐 Authenticate to GCP
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ inputs.project_id }}
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker --quiet
+
+      # 🐳 Build & Push Docker Image
+      - name: Build and Push Docker Image
+        run: |
+          IMAGE_TAG=${{ github.sha }}
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          BRANCH_NAME=${BRANCH_NAME//\//-}
+
+          docker build \
+            -t ${{ inputs.image_name }}:$IMAGE_TAG \
+            -t ${{ inputs.image_name }}:$BRANCH_NAME .
+
+          docker push ${{ inputs.image_name }}:$IMAGE_TAG
+          docker push ${{ inputs.image_name }}:$BRANCH_NAME
+
+          if [ "$BRANCH_NAME" = "main" ]; then
+            docker tag ${{ inputs.image_name }}:$IMAGE_TAG ${{ inputs.image_name }}:latest
+            docker push ${{ inputs.image_name }}:latest
+          fi
+
+      # ☸️ Get GKE credentials
+      - name: Get GKE Credentials
+        run: |
+          gcloud container clusters get-credentials \
+            ${{ inputs.cluster_name }} \
+            --region ${{ inputs.cluster_region }} \
+            --project ${{ inputs.project_id }}
+
+      # 📦 Namespace per branch
+      - name: Prepare Namespace
+        run: |
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          BRANCH_NAME=${BRANCH_NAME//\//-}
+
+          kubectl get ns $BRANCH_NAME || kubectl create ns $BRANCH_NAME
+
+      # 🚀 Deploy
+      - name: Deploy to GKE
+        run: |
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          BRANCH_NAME=${BRANCH_NAME//\//-}
+
+          kubectl set image deployment/${{ inputs.service_name }} \
+            ${{ inputs.service_name }}=${{ inputs.image_name }}:${{ github.sha }} \
+            -n $BRANCH_NAME
+
+          kubectl rollout status deployment/${{ inputs.service_name }} -n $BRANCH_NAME
+
+      # ❤️ Health Check
+      - name: Health Check
+        run: |
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          BRANCH_NAME=${BRANCH_NAME//\//-}
+
+          SERVICE_IP=$(kubectl get svc ${{ inputs.service_name }} \
+            -n $BRANCH_NAME \
+            -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+          echo "Waiting for service..."
+          sleep 15
+
+          curl -f http://$SERVICE_IP/actuator/health
