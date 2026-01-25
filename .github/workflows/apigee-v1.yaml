@@ -142,6 +142,7 @@ jobs:
           RESPONSE=$(curl -sS -X POST \
                 -H "Authorization: Bearer $ACCESS_TOKEN" \
                 -H "Content-Type: application/json" \
+                --data-raw '{ "override": true }' \
                 "$DEPLOY_URL")
           #RESPONSE=$(curl -s -X POST \
           #  -H "Authorization: Bearer $ACCESS_TOKEN" \
