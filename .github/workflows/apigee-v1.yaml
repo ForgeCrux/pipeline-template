@@ -1,5 +1,6 @@
 name: Reusable Apigee CI/CD (K8s Runner)
-
+#projects/1076618220242/locations/global/workloadIdentityPools/forgecrux-pool/providers/github-provider
+##gh-runner-gsa@methodical-mark-482504-j3.iam.gserviceaccount.com
 on:
   push:
     branches:
@@ -44,8 +45,8 @@ jobs:
         id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: projects/1076618220242/locations/global/workloadIdentityPools/forgecrux-pool/providers/github-provider
-          service_account: gh-runner-gsa@methodical-mark-482504-j3.iam.gserviceaccount.com
+          workload_identity_provider: ${{ secrets.WL_IDENTITY }} 
+          service_account: ${{ secrets.SERVICE_ACCOUNT }}
           token_format: access_token
 
       # 3️⃣ Setup Node
