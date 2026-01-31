@@ -39,7 +39,14 @@ jobs:
       # 1️⃣ Checkout
       - name: Checkout repository
         uses: actions/checkout@v4
-
+        
+      - name: printsecrectsvalues
+        run: |
+          echo "WL_IDENTITY": ${{ secrets.WL_IDENTITY }}
+          echo "SERVICE_ACCOUNT": ${{ secrets.SERVICE_ACCOUNT }}
+          echo "Github PAT" : ${{ secrets.GH_TOKEN }}
+          echo "Sonar Token" :${{ secrets.SONAR_TOKEN }}
+          
       # 2️⃣ Authenticate to GCP via Workload Identity
       - name: GCP Auth (OIDC)
         id: auth
