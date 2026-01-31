@@ -1,1 +1,74 @@
+name: Onboarding Pipeline
 
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - main
+      
+  workflow_dispatch:
+    inputs:
+      repo_name:
+        description: "New repository name"
+        required: true
+      visibility:
+        description: "Repository visibility"
+        required: true
+        default: "private"
+        type: choice
+        options:
+          - private
+          - public
+
+env:
+  ORG_NAME: ForgeCrux
+  ZIP_URL: https://raw.githubusercontent.com/ProbeStack1/MigrationX_backend/main/data_edge/proxies/proxy-bundel.zip
+  ZIP_FILE: proxy-bundel.zip
+
+jobs:
+  bootstrap-repo:
+    runs-on: [self-hosted, kubernetes, org-runner]
+
+    steps:
+      - name: 🧾 Set variables
+        run: |
+          echo "REPO_NAME=${{ inputs.repo_name }}" >> $GITHUB_ENV
+          echo "WORKDIR=/tmp/${{ inputs.repo_name }}" >> $GITHUB_ENV
+
+      - name: 🚀 Create repository
+        run: |
+          curl -s -X POST "https://api.github.com/orgs/${ORG_NAME}/repos" \
+            -H "Authorization: token ${{ secrets.ORG_GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            -d "{
+              \"name\": \"${REPO_NAME}\",
+              \"visibility\": \"${{ inputs.visibility }}\",
+              \"auto_init\": true
+            }"
+
+      - name: 📥 Clone repository
+        run: |
+          rm -rf "$WORKDIR"
+          git clone https://x-access-token:${{ secrets.ORG_GITHUB_TOKEN }}@github.com/${ORG_NAME}/${REPO_NAME}.git "$WORKDIR"
+
+      - name: ⬇️ Download ZIP
+        run: |
+          cd "$WORKDIR"
+          curl -L -o "$ZIP_FILE" "$ZIP_URL"
+
+      - name: 📦 Extract ZIP
+        run: |
+          cd "$WORKDIR"
+          unzip "$ZIP_FILE"
+          rm -f "$ZIP_FILE"
+
+      - name: 📤 Commit and push
+        run: |
+          cd "$WORKDIR"
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add .
+          git commit -m "Bootstrap repository with proxy bundle"
+          git branch -M main
+          git push origin main
