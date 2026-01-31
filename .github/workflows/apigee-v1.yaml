@@ -161,3 +161,20 @@ jobs:
           #  "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/apis/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments")
       
           echo "Deployment response: $RESPONSE"
+
+      # 1️⃣2️⃣ Verify Apigee proxy exists
+      - name: Verify Apigee proxy exists
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          set -euo pipefail
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}")
+          if [ "$STATUS" != "200" ]; then
+              echo "❌ Proxy '$PROXY' does not exist in org '$ORG'"
+              exit 1
+            fi
+          
+          echo "✅ Proxy exists"
+          echo "Deployment response: $RESPONSE"
