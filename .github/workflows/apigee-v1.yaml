@@ -52,9 +52,10 @@ jobs:
         id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.WL_IDENTITY }} 
+          workload_identity_provider: ${{ secrets.WI_IDENTITY }}
           service_account: ${{ secrets.SERVICE_ACCOUNT }}
           token_format: access_token
+          create_credentials_file: true
 
       # 3️⃣ Setup Node
       - name: Setup Node
