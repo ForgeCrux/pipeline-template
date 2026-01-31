@@ -1,0 +1,10 @@
+{
+  "name": "Repository Bootstrap (ZIP)",
+  "description": "Create a new repository and bootstrap it with approved ZIP content",
+  "iconName": "repo",
+  "categories": [
+    "automation",
+    "deployment",
+    "DevSecOps"
+  ]
+}
