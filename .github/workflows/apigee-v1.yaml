@@ -2,9 +2,12 @@ name: Reusable Apigee CI/CD (K8s Runner)
 #projects/1076618220242/locations/global/workloadIdentityPools/forgecrux-pool/providers/github-provider
 ##gh-runner-gsa@methodical-mark-482504-j3.iam.gserviceaccount.com
 on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
   push:
     branches:
       - main
+    
       
   workflow_call:
     inputs:
