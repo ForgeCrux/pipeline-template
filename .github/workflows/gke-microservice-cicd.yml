@@ -28,7 +28,7 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: [self-hosted, kubernetes, org-runner]
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
