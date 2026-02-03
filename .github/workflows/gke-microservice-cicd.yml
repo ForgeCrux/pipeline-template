@@ -22,6 +22,10 @@ on:
         required: false
         type: string
         default: "17"
+      namespace:
+        required: true
+        type: string
+        default: "dev"
     secrets:
       GCP_SA_KEY:
         required: true
@@ -58,6 +62,9 @@ jobs:
       contents: read
       id-token: write
 
+    env:
+      registry: "us-central1-docker.pkg.dev/methodical-mark-482504-j3/probestack-nonprod-apps/"
+      
     steps:
       - uses: actions/checkout@v4
 
@@ -82,17 +89,14 @@ jobs:
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           BRANCH_NAME=${BRANCH_NAME//\//-}
 
-          docker build \
-            -t ${{ inputs.image_name }}:$IMAGE_TAG \
-            -t ${{ inputs.image_name }}:$BRANCH_NAME .
-
-          docker push ${{ inputs.image_name }}:$IMAGE_TAG
-          docker push ${{ inputs.image_name }}:$BRANCH_NAME
-
-          if [ "$BRANCH_NAME" = "main" ]; then
-            docker tag ${{ inputs.image_name }}:$IMAGE_TAG ${{ inputs.image_name }}:latest
-            docker push ${{ inputs.image_name }}:latest
-          fi
+          docker build -t ${{ env.registry}}/${{ inputs.image_name }}:$BRANCH_NAME-$IMAGE_TAG 
+          
+          docker push -t ${{ env.registry}}/${{ inputs.image_name }}:$BRANCH_NAME-$IMAGE_TAG
+          
+          #if [ "$BRANCH_NAME" = "main" ]; then
+          #  docker tag ${{ inputs.image_name }}:$IMAGE_TAG ${{ inputs.image_name }}:latest
+          #  docker push ${{ inputs.image_name }}:latest
+          #fi
 
       # ☸️ Get GKE credentials
       - name: Get GKE Credentials
@@ -101,14 +105,6 @@ jobs:
             ${{ inputs.cluster_name }} \
             --region ${{ inputs.cluster_region }} \
             --project ${{ inputs.project_id }}
-
-      # 📦 Namespace per branch
-      - name: Prepare Namespace
-        run: |
-          BRANCH_NAME=${GITHUB_REF#refs/heads/}
-          BRANCH_NAME=${BRANCH_NAME//\//-}
-
-          kubectl get ns $BRANCH_NAME || kubectl create ns $BRANCH_NAME
 
       # 🚀 Deploy
       - name: Deploy to GKE
