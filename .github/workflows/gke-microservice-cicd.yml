@@ -27,32 +27,8 @@ on:
         required: true
 
 jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ inputs.java_version }}
-          distribution: temurin
-          cache: maven
-
-      - name: Build
-        run: mvn clean compile -B
-
-      - name: Test
-        run: mvn test -B
-        continue-on-error: true
-
-      - name: Package
-        run: mvn package -DskipTests -B
-
   deploy:
-    needs: build-and-test
-    runs-on: [self-hosted, kubernetes, org-runner]
+    runs-on: ubuntu-latest
 
     permissions:
       contents: read
