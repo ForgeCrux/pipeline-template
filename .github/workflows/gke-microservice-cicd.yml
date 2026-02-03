@@ -18,10 +18,6 @@ on:
       image_name:
         required: true
         type: string
-      java_version:
-        required: false
-        type: string
-        default: "17"
       namespace:
         required: true
         type: string
@@ -109,23 +105,17 @@ jobs:
       # 🚀 Deploy
       - name: Deploy to GKE
         run: |
-          BRANCH_NAME=${GITHUB_REF#refs/heads/}
-          BRANCH_NAME=${BRANCH_NAME//\//-}
-
           kubectl set image deployment/${{ inputs.service_name }} \
             ${{ inputs.service_name }}=${{ inputs.image_name }}:${{ github.sha }} \
-            -n $BRANCH_NAME
+            -n ${{ inputs.namespace }}
 
-          kubectl rollout status deployment/${{ inputs.service_name }} -n $BRANCH_NAME
-
+          kubectl rollout status deployment/${{ inputs.service_name }} -n ${{ inputs.namespace }}
+          
       # ❤️ Health Check
       - name: Health Check
         run: |
-          BRANCH_NAME=${GITHUB_REF#refs/heads/}
-          BRANCH_NAME=${BRANCH_NAME//\//-}
-
           SERVICE_IP=$(kubectl get svc ${{ inputs.service_name }} \
-            -n $BRANCH_NAME \
+            -n ${{ inputs.namespace }} \
             -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 
           echo "Waiting for service..."
