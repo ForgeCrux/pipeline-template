@@ -32,7 +32,7 @@ jobs:
 
     permissions:
       contents: read
-      id-token: none
+      id-token: write
 
     env:
       registry: "us-central1-docker.pkg.dev/methodical-mark-482504-j3/probestack-nonprod-apps/"
