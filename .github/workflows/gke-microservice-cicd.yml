@@ -74,7 +74,7 @@ jobs:
           IMAGE_TAG=${{ github.sha }}
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           BRANCH_NAME=${BRANCH_NAME//\//-}
-          TAG="${BRANCH_NAME}-${IMAGE_TAG}"
+          TAG="${BRANCH_NAME}-${IMAGE_TAG::7}"
 
           echo "Building ${FULL_IMAGE}:${TAG}"
           docker build -t "${FULL_IMAGE}:${TAG}" .
@@ -83,6 +83,7 @@ jobs:
           docker push "${FULL_IMAGE}:${TAG}"
 
           echo "IMAGE_URI=${FULL_IMAGE}:${TAG}" >> $GITHUB_ENV
+          echo "IMAGE_TAG=${TAG}" >> $GITHUB_ENV
 
       - name: Get GKE Credentials
         run: |
