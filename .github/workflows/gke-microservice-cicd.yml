@@ -43,7 +43,7 @@ jobs:
 
     env:
       # Ensure trailing slash here once, so we can concatenate image name cleanly
-      registry: "us-central1-docker.pkg.dev/methodical-mark-482504-j3/probestack-nonprod-apps"
+      registry: "us-central1-docker.pkg.dev/methodical-mark-482504-j3/probestack-nonprod-apps/"
 
     steps:
       - uses: actions/checkout@v4
