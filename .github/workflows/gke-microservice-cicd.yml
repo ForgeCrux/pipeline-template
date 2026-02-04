@@ -8,6 +8,33 @@ permissions:
 on:
   workflow_call:
     inputs:
+      tech:
+        description: "Technology stack: node | java"
+        required: true
+        type: string
+        
+      # Node inputs
+      node_version:
+        type: string
+        default: "20"
+      node_install:
+        type: string
+        default: "npm ci"
+      node_build:
+        type: string
+        default: "npm run build"
+
+      # Java inputs
+      java_version:
+        type: string
+        default: "17"
+      java_distribution:
+        type: string
+        default: "temurin"
+      java_build:
+        type: string
+        default: "mvn -B clean package"
+        
       project_id:
         required: true
         type: string
@@ -47,7 +74,37 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      # -------------------- Node --------------------
+      - name: Setup Node.js
+        if: inputs.tech == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: npm
 
+      - name: Node install
+        if: inputs.tech == 'node'
+        run: ${{ inputs.node_install }}
+
+      - name: Node build
+        if: inputs.tech == 'node'
+        env:
+          CI: "false"
+        run: ${{ inputs.node_build }}
+        
+      # -------------------- JAVA --------------------
+      - name: Setup Java
+        if: inputs.tech == 'java'
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ inputs.java_distribution }}
+          java-version: ${{ inputs.java_version }}
+          cache: maven
+
+      - name: Java build
+        if: inputs.tech == 'java'
+        run: ${{ inputs.java_build }}
+        
       - name: Authenticate to Google Cloud (OIDC)
         uses: google-github-actions/auth@v2
         with:
