@@ -29,7 +29,7 @@ on:
 jobs:
   deploy:
     permissions:
-      id-token: write
+      id-token: none
       contents: read
       
     runs-on: ubuntu-latest
