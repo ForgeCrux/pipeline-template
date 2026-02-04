@@ -90,7 +90,7 @@ jobs:
         if: inputs.tech == 'node'
         env:
           CI: "false"
-        run: && ls -la  && ${{ inputs.node_build }} && ls -la 
+        run: ls -la  && ${{ inputs.node_build }} && ls -la 
         
       # -------------------- JAVA --------------------
       - name: Setup Java
