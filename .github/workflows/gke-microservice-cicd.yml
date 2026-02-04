@@ -97,11 +97,13 @@ jobs:
 
       - name: Deploy to GKE
         run: |
-          kubectl set image deployment/${{ inputs.service_name }} \
-            ${{ inputs.service_name }}=${IMAGE_URI} \
-            -n ${{ inputs.namespace }}
+          envsubst 'BUILD=${IMAGE_TAG}' < k8s/deployment.yaml | kubectl apply -f - -n ${{ inputs.namespace }}
+          
+          #kubectl set image deployment/${{ inputs.service_name }} \
+          #  ${{ inputs.service_name }}=${IMAGE_URI} \
+          #  -n ${{ inputs.namespace }}
 
-          kubectl rollout status deployment/${{ inputs.service_name }} -n ${{ inputs.namespace }}
+          #kubectl rollout status deployment/${{ inputs.service_name }} -n ${{ inputs.namespace }}
 
       - name: Health Check
         run: |
