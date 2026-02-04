@@ -1,5 +1,10 @@
 name: Reusable CI/CD - Microservice Deploy to GKE
 
+# Apply permissions to all jobs in this reusable workflow (or move to job-level)
+permissions:
+  contents: read
+  id-token: write
+
 on:
   workflow_call:
     inputs:
@@ -22,59 +27,60 @@ on:
         required: true
         type: string
         default: "dev"
-    secrets:
-      GCP_SA_KEY:
-        required: true
+    # Remove this if using OIDC; keep only if you choose key-based auth:
+    # secrets:
+    #   GCP_SA_KEY:
+    #     required: true
 
 jobs:
   deploy:
-    permissions:
-      id-token: none
-      contents: read
-      
     runs-on: ubuntu-latest
 
-    #permissions:
-    #  contents: read
-    #  id-token: write
+    # If you prefer per-job permissions, uncomment and keep this matching top level:
+    # permissions:
+    #   contents: read
+    #   id-token: write
 
     env:
+      # Ensure trailing slash here once, so we can concatenate image name cleanly
       registry: "us-central1-docker.pkg.dev/methodical-mark-482504-j3/probestack-nonprod-apps/"
-      
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
+      - name: Authenticate to Google Cloud (OIDC)
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: projects/1076618220242/locations/global/workloadIdentityPools/github-pool/providers/github-provider
           service_account: github-actions-deployer@methodical-mark-482504-j3.iam.gserviceaccount.com
+          export_environment_variables: true
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ inputs.project_id }}
 
-      - name: Configure Docker
-        run: gcloud auth configure-docker --quiet
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
-      # 🐳 Build & Push Docker Image
       - name: Build and Push Docker Image
+        env:
+          FULL_IMAGE: ${{ env.registry }}${{ inputs.image_name }}
         run: |
+          set -e
           IMAGE_TAG=${{ github.sha }}
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           BRANCH_NAME=${BRANCH_NAME//\//-}
+          TAG="${BRANCH_NAME}-${IMAGE_TAG}"
 
-          docker build -t ${{ env.registry}}/${{ inputs.image_name }}:$BRANCH_NAME-$IMAGE_TAG 
-          
-          docker push -t ${{ env.registry}}/${{ inputs.image_name }}:$BRANCH_NAME-$IMAGE_TAG
-          
-          #if [ "$BRANCH_NAME" = "main" ]; then
-          #  docker tag ${{ inputs.image_name }}:$IMAGE_TAG ${{ inputs.image_name }}:latest
-          #  docker push ${{ inputs.image_name }}:latest
-          #fi
+          echo "Building ${FULL_IMAGE}:${TAG}"
+          docker build -t "${FULL_IMAGE}:${TAG}" .
 
-      # ☸️ Get GKE credentials
+          echo "Pushing ${FULL_IMAGE}:${TAG}"
+          docker push "${FULL_IMAGE}:${TAG}"
+
+          echo "IMAGE_URI=${FULL_IMAGE}:${TAG}" >> $GITHUB_ENV
+
       - name: Get GKE Credentials
         run: |
           gcloud container clusters get-credentials \
@@ -82,23 +88,32 @@ jobs:
             --region ${{ inputs.cluster_region }} \
             --project ${{ inputs.project_id }}
 
-      # 🚀 Deploy
       - name: Deploy to GKE
         run: |
           kubectl set image deployment/${{ inputs.service_name }} \
-            ${{ inputs.service_name }}=${{ inputs.image_name }}:${{ github.sha }} \
+            ${{ inputs.service_name }}=${IMAGE_URI} \
             -n ${{ inputs.namespace }}
 
           kubectl rollout status deployment/${{ inputs.service_name }} -n ${{ inputs.namespace }}
-          
-      # ❤️ Health Check
+
       - name: Health Check
         run: |
-          SERVICE_IP=$(kubectl get svc ${{ inputs.service_name }} \
-            -n ${{ inputs.namespace }} \
-            -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          set -e
+          for i in {1..20}; do
+            SERVICE_IP=$(kubectl get svc ${{ inputs.service_name }} \
+              -n ${{ inputs.namespace }} \
+              -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+            if [ -n "$SERVICE_IP" ]; then
+              echo "Service IP: $SERVICE_IP"
+              break
+            fi
+            echo "Waiting for LoadBalancer IP... ($i/20)"
+            sleep 10
+          done
 
-          echo "Waiting for service..."
-          sleep 15
+          if [ -z "$SERVICE_IP" ]; then
+            echo "No LoadBalancer IP assigned within timeout"
+            exit 1
+          fi
 
-          curl -f http://$SERVICE_IP/actuator/health
+          curl -f "http://$SERVICE_IP/actuator/health"
