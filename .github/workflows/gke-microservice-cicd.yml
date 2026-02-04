@@ -43,7 +43,7 @@ jobs:
 
     env:
       # Ensure trailing slash here once, so we can concatenate image name cleanly
-      registry: "us-central1-docker.pkg.dev/methodical-mark-482504-j3/probestack-nonprod-apps/"
+      registry: "us-central1-docker.pkg.dev/methodical-mark-482504-j3/probestack-nonprod-apps"
 
     steps:
       - uses: actions/checkout@v4
@@ -53,7 +53,6 @@ jobs:
         with:
           workload_identity_provider: projects/1076618220242/locations/global/workloadIdentityPools/github-pool/providers/github-provider
           service_account: github-actions-deployer@methodical-mark-482504-j3.iam.gserviceaccount.com
-          export_environment_variables: true
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
