@@ -88,9 +88,16 @@ jobs:
 
       - name: Node build
         if: inputs.tech == 'node'
-        env:
-          CI: "false"
-        run: ${{ inputs.node_build }} 
+        run: |
+          ls -la
+          npm install mobx styled-components --save
+          npm run build 
+          ls -la 
+          ls -la dist/
+          
+        #env:
+        #  CI: "false"
+        #run: ${{ inputs.node_build }} 
         
       # -------------------- JAVA --------------------
       - name: Setup Java
