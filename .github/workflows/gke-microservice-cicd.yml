@@ -176,6 +176,8 @@ jobs:
           set -e
           for i in {1..5}; do
             kubectl get pods -n ${{ inputs.namespace }} | grep ${{ inputs.service_name }}
+            echo "Sleep 10"
             sleep 10
           done
+          kubectl describe deployment ${{ inputs.service_name }} -n ${{ inputs.namespace }}
           echo "Sucessfully Build ${{ inputs.service_name }} and Deloyed to -n ${{ inputs.namespace }} Namespace"
