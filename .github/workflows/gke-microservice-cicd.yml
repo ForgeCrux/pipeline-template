@@ -94,7 +94,6 @@ jobs:
           npm run build 
           ls -la 
           ls -la dist/
-         cache: dist 
           
         #env:
         #  CI: "false"
@@ -136,6 +135,7 @@ jobs:
           FULL_IMAGE: ${{ env.registry }}${{ inputs.image_name }}
         run: |
           set -e
+          ls -la && ls -la dist/
           IMAGE_TAG=${{ github.sha }}
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           BRANCH_NAME=${BRANCH_NAME//\//-}
