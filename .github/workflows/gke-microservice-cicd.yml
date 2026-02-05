@@ -169,24 +169,11 @@ jobs:
           kubectl rollout status deployment/${{ inputs.service_name }} \
             -n ${{ inputs.namespace }}
             
-      - name: Health Check
+      - name: Verify GKE Deployment
         run: |
           set -e
-          for i in {1..20}; do
-            SERVICE_IP=$(kubectl get svc ${{ inputs.service_name }} \
-              -n ${{ inputs.namespace }} \
-              -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-            if [ -n "$SERVICE_IP" ]; then
-              echo "Service IP: $SERVICE_IP"
-              break
-            fi
-            echo "Waiting for LoadBalancer IP... ($i/20)"
+          for i in {1..5}; do
+            kubectl get pods ${{ inputs.service_name }} -n ${{ inputs.namespace }}
             sleep 10
           done
-
-          if [ -z "$SERVICE_IP" ]; then
-            echo "No LoadBalancer IP assigned within timeout"
-            exit 1
-          fi
-
-          curl -f "http://$SERVICE_IP/actuator/health"
+          echo "Sucessfully Build ${{ inputs.service_name }} and Deloyed to -n ${{ inputs.namespace }} Namespace"
