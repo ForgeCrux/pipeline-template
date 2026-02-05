@@ -175,7 +175,7 @@ jobs:
         run: |
           set -e
           for i in {1..5}; do
-            kubectl get pods -n ${{ inputs.namespace }} | grep '"${{ inputs.service_name }}"'
+            kubectl get pods -n ${{ inputs.namespace }} | grep ${{ inputs.service_name }}
             sleep 10
           done
           echo "Sucessfully Build ${{ inputs.service_name }} and Deloyed to -n ${{ inputs.namespace }} Namespace"
