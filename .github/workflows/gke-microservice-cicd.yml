@@ -151,6 +151,7 @@ jobs:
 
           echo "IMAGE_URI=${FULL_IMAGE}:${TAG}" >> $GITHUB_ENV
           echo "IMAGE_TAG=${TAG}" >> $GITHUB_ENV
+          echo "SERVICE_NAME=${{ inputs.image_name }}" >> $GITHUB_ENV
 
       - name: Install GKE auth plugin
         run: gcloud components install gke-gcloud-auth-plugin --quiet
@@ -164,8 +165,9 @@ jobs:
       - name: Deploy to GKE
         run: |
           : "${IMAGE_TAG:?IMAGE_TAG not set}"
+          : "${SERVICE_NAME:?SERVICE_NAME not set}"
       
-          envsubst '${IMAGE_TAG}' < k8s/deployment.yaml \
+          envsubst '${SERVICE_NAME} ${IMAGE_TAG}' < k8s/deployment.yaml \
             | kubectl apply -f - -n ${{ inputs.namespace }}
       
           kubectl rollout status deployment/${{ inputs.service_name }} \
