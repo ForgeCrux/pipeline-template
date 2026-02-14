@@ -137,7 +137,7 @@ jobs:
           FULL_IMAGE: ${{ env.registry }}${{ inputs.image_name }}
         run: |
           set -e
-          pwd && ls -la && ls -la dist/
+          pwd && ls -la
           IMAGE_TAG=${{ github.sha }}
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           BRANCH_NAME=${BRANCH_NAME//\//-}
