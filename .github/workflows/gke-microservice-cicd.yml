@@ -120,17 +120,6 @@ jobs:
           workload_identity_provider: projects/1076618220242/locations/global/workloadIdentityPools/github-pool/providers/github-provider
           service_account: github-actions-deployer@methodical-mark-482504-j3.iam.gserviceaccount.com
           
-      - uses: actions/github-script@v7
-        with:
-          script: |
-            const id_token = await core.getIDToken();
-            console.log(JSON.parse(Buffer.from(id_token.split('.')[1], 'base64').toString()));
-      
-      - name: Debug OIDC token
-        run: |
-          echo "${ACTIONS_ID_TOKEN_REQUEST_URL}"
-          echo "${ACTIONS_ID_TOKEN_REQUEST_TOKEN}"
-          
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
         with:
