@@ -182,4 +182,4 @@ jobs:
             sleep 10
           done
           kubectl describe deployment ${{ inputs.service_name }} -n ${{ inputs.namespace }} | grep -i Image
-          echo "Sucessfully Build ${{ inputs.service_name }} and Deloyed to -n ${{ inputs.namespace }} Namespace"
+          echo "Sucessfully Build ${{ inputs.service_name }} and Deloyed to ${{ inputs.namespace }} namespace"
