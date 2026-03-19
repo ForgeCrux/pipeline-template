@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.APP_NAME | default "react-vite" }}
+  labels:
+    app: {{ .Values.APP_NAME | default "react-vite" }}
+spec:
+  type: {{ .Values.SERVICE_TYPE | default "ClusterIP" }}
+  selector:
+    app: {{ .Values.APP_NAME | default "react-vite" }}
+  ports:
+    - protocol: TCP
+      port: {{ .Values.SERVICE_PORT | default 80 }}
+      targetPort: {{ .Values.CONTAINER_PORT | default 80 }}
