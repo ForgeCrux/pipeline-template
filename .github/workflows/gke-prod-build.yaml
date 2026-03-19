@@ -3,22 +3,7 @@ name: GKE Build Template
 on:
   workflow_call:
     inputs:
-      project_id:
-        required: true
-        type: string
-      artifact_repo:
-        required: true
-        type: string
-      artifact_registry:
-        required: true
-        type: string
       service_name:
-        required: true
-        type: string
-      workload_identity_provider:
-        required: true
-        type: string
-      service_account:
         required: true
         type: string
 
@@ -26,6 +11,11 @@ on:
       image_tag:
         description: "Built image tag"
         value: ${{ jobs.build.outputs.image_tag }}
+
+env:
+  PROJECT_ID: probestack-prod
+  ARTIFACT_REPO: probestack-prod-apps
+  ARTIFACT_REGISTRY: us-central1-docker.pkg.dev
 
 jobs:
   build:
@@ -35,11 +25,15 @@ jobs:
       contents: read
       id-token: write
 
+    env:
+      SERVICE_NAME: ${{ inputs.service_name }}
+
     outputs:
       image_tag: ${{ steps.meta.outputs.tag }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source
+        uses: actions/checkout@v4
 
       - name: Authenticate to Google Cloud
         id: auth
@@ -49,16 +43,18 @@ jobs:
           service_account: github-actions-deployer@probestack-prod.iam.gserviceaccount.com
           token_format: access_token
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
 
       - name: Login to Artifact Registry
         uses: docker/login-action@v3
         with:
-          registry: ${{ inputs.artifact_registry }}
+          registry: ${{ env.ARTIFACT_REGISTRY }}
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
 
-      - uses: docker/setup-buildx-action@v3
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Generate Image Tag
         id: meta
@@ -71,6 +67,6 @@ jobs:
           push: true
           provenance: false
           tags: |
-            ${{ inputs.artifact_registry }}/${{ inputs.project_id }}/${{ inputs.artifact_repo }}/${{ inputs.service_name }}:${{ steps.meta.outputs.tag }}
+            ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REPO }}/${{ env.SERVICE_NAME }}:${{ steps.meta.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
