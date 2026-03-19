@@ -1,52 +1,52 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.APP_NAME | default "react-vite" }}
+  name: ${APP_NAME}
   labels:
-    app: {{ .Values.APP_NAME | default "react-vite" }}
+    app: ${APP_NAME}
 spec:
-  replicas: {{ .Values.REPLICAS | default 2 }}
+  replicas: ${REPLICAS}
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: {{ .Values.MAX_UNAVAILABLE | default "25%" }}
-      maxSurge: {{ .Values.MAX_SURGE | default "25%" }}
+      maxUnavailable: ${MAX_UNAVAILABLE}
+      maxSurge: ${MAX_SURGE}
   selector:
     matchLabels:
-      app: {{ .Values.APP_NAME | default "react-vite" }}
+      app: ${APP_NAME}
   template:
     metadata:
       labels:
-        app: {{ .Values.APP_NAME | default "react-vite" }}
+        app: ${APP_NAME}
     spec:
       containers:
-        - name: {{ .Values.APP_NAME | default "react-vite" }}
-          image: {{ .Values.IMAGE_REGISTRY }}/{{ .Values.PROJECT_ID }}/{{ .Values.ARTIFACT_REPO }}/{{ .Values.APP_NAME }}:{{ .Values.IMAGE_TAG }}
+        - name: ${APP_NAME}
+          image: ${ARTIFACT_REGISTRY}/${PROJECT_ID}/${ARTIFACT_REPO}/${APP_NAME}:${IMAGE_TAG}
           ports:
-            - containerPort: {{ .Values.CONTAINER_PORT | default 80 }}
+            - containerPort: ${CONTAINER_PORT}
               protocol: TCP
           resources:
             requests:
-              cpu: {{ .Values.REQUEST_CPU | default "100m" }}
-              memory: {{ .Values.REQUEST_MEMORY | default "128Mi" }}
+              cpu: ${REQUEST_CPU}
+              memory: ${REQUEST_MEMORY}
             limits:
-              cpu: {{ .Values.LIMIT_CPU | default "500m" }}
-              memory: {{ .Values.LIMIT_MEMORY | default "512Mi" }}
+              cpu: ${LIMIT_CPU}
+              memory: ${LIMIT_MEMORY}
           livenessProbe:
             httpGet:
-              path: {{ .Values.LIVENESS_PATH | default "/" }}
-              port: {{ .Values.CONTAINER_PORT | default 80 }}
-            initialDelaySeconds: {{ .Values.LIVENESS_INITIAL_DELAY | default 15 }}
-            timeoutSeconds: {{ .Values.LIVENESS_TIMEOUT | default 1 }}
-            periodSeconds: {{ .Values.LIVENESS_PERIOD | default 20 }}
-            failureThreshold: {{ .Values.LIVENESS_FAILURE_THRESHOLD | default 3 }}
-            successThreshold: {{ .Values.LIVENESS_SUCCESS_THRESHOLD | default 1 }}
+              path: ${LIVENESS_PATH}
+              port: ${CONTAINER_PORT}
+            initialDelaySeconds: ${LIVENESS_INITIAL_DELAY}
+            timeoutSeconds: ${LIVENESS_TIMEOUT}
+            periodSeconds: ${LIVENESS_PERIOD}
+            failureThreshold: ${LIVENESS_FAILURE_THRESHOLD}
+            successThreshold: ${LIVENESS_SUCCESS_THRESHOLD}
           readinessProbe:
             httpGet:
-              path: {{ .Values.READINESS_PATH | default "/" }}
-              port: {{ .Values.CONTAINER_PORT | default 80 }}
-            initialDelaySeconds: {{ .Values.READINESS_INITIAL_DELAY | default 5 }}
-            timeoutSeconds: {{ .Values.READINESS_TIMEOUT | default 1 }}
-            periodSeconds: {{ .Values.READINESS_PERIOD | default 10 }}
-            failureThreshold: {{ .Values.READINESS_FAILURE_THRESHOLD | default 3 }}
-            successThreshold: {{ .Values.READINESS_SUCCESS_THRESHOLD | default 1 }}
+              path: ${READINESS_PATH}
+              port: ${CONTAINER_PORT}
+            initialDelaySeconds: ${READINESS_INITIAL_DELAY}
+            timeoutSeconds: ${READINESS_TIMEOUT}
+            periodSeconds: ${READINESS_PERIOD}
+            failureThreshold: ${READINESS_FAILURE_THRESHOLD}
+            successThreshold: ${READINESS_SUCCESS_THRESHOLD}
