@@ -1,0 +1,80 @@
+name: GKE Deploy Template
+
+on:
+  workflow_call:
+    inputs:
+      project_id:
+        required: true
+        type: string
+      artifact_repo:
+        required: true
+        type: string
+      artifact_registry:
+        required: true
+        type: string
+      service_name:
+        required: true
+        type: string
+      gke_cluster:
+        required: true
+        type: string
+      gke_location:
+        required: true
+        type: string
+      gke_location_flag:
+        required: true
+        type: string
+      namespace:
+        required: true
+        type: string
+      image_tag:
+        required: true
+        type: string
+      workload_identity_provider:
+        required: true
+        type: string
+      service_account:
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/861433193200/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-actions-deployer@probestack-prod.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install GKE auth plugin
+        run: gcloud components install gke-gcloud-auth-plugin --quiet
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ inputs.gke_cluster }} \
+          ${{ inputs.gke_location_flag }} ${{ inputs.gke_location }} \
+          --project ${{ inputs.project_id }}
+
+      - name: Deploy to GKE
+        run: |
+          kubectl set image deployment/${{ inputs.service_name }} \
+          ${{ inputs.service_name }}=${{ inputs.artifact_registry }}/${{ inputs.project_id }}/${{ inputs.artifact_repo }}/${{ inputs.service_name }}:${{ inputs.image_tag }} \
+          -n ${{ inputs.namespace }}
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/${{ inputs.service_name }} \
+          -n ${{ inputs.namespace }}
+
+      - name: Verify pods
+        run: |
+          kubectl get pods -n ${{ inputs.namespace }}
