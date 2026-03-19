@@ -39,7 +39,7 @@ jobs:
           workload_identity_provider: projects/861433193200/locations/global/workloadIdentityPools/github-pool/providers/github-provider
           service_account: github-actions-deployer@probestack-prod.iam.gserviceaccount.com
 
-      - name: Setup gcloud
+      - name: Setup gcloud CLI
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Install GKE auth plugin
