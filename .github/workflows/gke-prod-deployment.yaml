@@ -3,50 +3,22 @@ name: GKE Deploy Template
 on:
   workflow_call:
     inputs:
-      project_id:
-        required: true
-        type: string
-      artifact_repo:
-        required: true
-        type: string
-      artifact_registry:
-        required: true
-        type: string
       service_name:
-        required: true
-        type: string
-      gke_cluster:
-        required: true
-        type: string
-      gke_location:
-        required: true
-        type: string
-      gke_location_flag:
-        required: true
-        type: string
-      namespace:
         required: true
         type: string
       image_tag:
         required: true
         type: string
-      workload_identity_provider:
-        required: true
-        type: string
-      service_account:
-        required: true
-        type: string
-        
+
 env:
   PROJECT_ID: probestack-prod
   ARTIFACT_REPO: probestack-prod-apps
   ARTIFACT_REGISTRY: us-central1-docker.pkg.dev
-  SERVICE_NAME: probestack-apigee-assessment-service
   GKE_CLUSTER: probestack-zonal-cluster
   GKE_LOCATION: us-central1-a
   GKE_LOCATION_FLAG: --zone
   NAMESPACE: secure-production-app
-  
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -54,6 +26,10 @@ jobs:
     permissions:
       contents: read
       id-token: write
+
+    env:
+      SERVICE_NAME: ${{ inputs.service_name }}
+      IMAGE_TAG: ${{ inputs.image_tag }}
 
     steps:
       - name: Authenticate to Google Cloud
@@ -63,28 +39,29 @@ jobs:
           workload_identity_provider: projects/861433193200/locations/global/workloadIdentityPools/github-pool/providers/github-provider
           service_account: github-actions-deployer@probestack-prod.iam.gserviceaccount.com
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
 
       - name: Install GKE auth plugin
         run: gcloud components install gke-gcloud-auth-plugin --quiet
 
       - name: Get GKE credentials
         run: |
-          gcloud container clusters get-credentials ${{ inputs.gke_cluster }} \
-          ${{ inputs.gke_location_flag }} ${{ inputs.gke_location }} \
-          --project ${{ inputs.project_id }}
+          gcloud container clusters get-credentials $GKE_CLUSTER \
+          $GKE_LOCATION_FLAG $GKE_LOCATION \
+          --project $PROJECT_ID
 
       - name: Deploy to GKE
         run: |
-          kubectl set image deployment/${{ inputs.service_name }} \
-          ${{ inputs.service_name }}=${{ inputs.artifact_registry }}/${{ inputs.project_id }}/${{ inputs.artifact_repo }}/${{ inputs.service_name }}:${{ inputs.image_tag }} \
-          -n ${{ inputs.namespace }}
+          kubectl set image deployment/$SERVICE_NAME \
+          $SERVICE_NAME=$ARTIFACT_REGISTRY/$PROJECT_ID/$ARTIFACT_REPO/$SERVICE_NAME:$IMAGE_TAG \
+          -n $NAMESPACE
 
       - name: Wait for rollout
         run: |
-          kubectl rollout status deployment/${{ inputs.service_name }} \
-          -n ${{ inputs.namespace }}
+          kubectl rollout status deployment/$SERVICE_NAME \
+          -n $NAMESPACE
 
       - name: Verify pods
         run: |
-          kubectl get pods -n ${{ inputs.namespace }}
+          kubectl get pods -n $NAMESPACE
