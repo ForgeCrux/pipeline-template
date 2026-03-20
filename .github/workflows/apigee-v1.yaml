@@ -52,14 +52,14 @@ jobs:
           echo "Sonar Token" :${{ secrets.SONAR_TOKEN }}
           
       # 2️⃣ Authenticate to GCP via Workload Identity
-      - name: GCP Auth (OIDC)
-        id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: projects/861433193200/locations/global/workloadIdentityPools/github-pool/providers/github-provider
-          service_account: github-actions-deployer@probestack-prod.iam.gserviceaccount.com
-          token_format: access_token
-          create_credentials_file: true
+      #- name: GCP Auth (OIDC)
+      #  id: auth
+      #  uses: google-github-actions/auth@v2
+      #  with:
+      #    workload_identity_provider: projects/861433193200/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+      #    service_account: github-actions-deployer@probestack-prod.iam.gserviceaccount.com
+      #    token_format: access_token
+      #    create_credentials_file: true
 
       # 3️⃣ Setup Node
       - name: Setup Node
