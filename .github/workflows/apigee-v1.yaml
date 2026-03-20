@@ -93,6 +93,10 @@ jobs:
       #    curl -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
       #         https://api.github.com/repos/ForgeCrux/apigee-linting-custom
 
+      - name: Force GitHub auth
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          
        # 6️⃣ Checkout lint rules
       - name: Checkout lint rules
         uses: actions/checkout@v4
