@@ -67,11 +67,19 @@ jobs:
         with:
           node-version: ${{ inputs.node_version }}
 
-      # 4️⃣ Cache npm
-      - uses: actions/cache@v4
+      - name: Cache npm
+        uses: actions/cache@v4
         with:
           path: ~/.npm
-          key: npm-${{ runner.os }}-${{ inputs.node_version }}
+          key: npm-${{ runner.os }}-${{ inputs.node_version }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-${{ inputs.node_version }}-
+
+      # 4️⃣ Cache npm
+      #- uses: actions/cache@v4
+      #  with:
+      #    path: ~/.npm
+      #    key: npm-${{ runner.os }}-${{ inputs.node_version }}
 
       # 5️⃣ Install tooling
       - name: Install tools
