@@ -101,7 +101,7 @@ jobs:
           ref: develop
           path: apigee-linting-custom
           #token: ${{ secrets.GH_TOKEN }}
-          token: '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'
+          token: 'ProbeStack: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'
       
       # 6️⃣ Apigee Lint
       - name: Apigee Lint
