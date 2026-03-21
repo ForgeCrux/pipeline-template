@@ -26,6 +26,26 @@ on:
       PAT_TOKEN:
         required: false
 
+  workflow_dispatch:
+    inputs:
+      remote_repo:
+        required: true
+        type: string
+      remote_branch:
+        required: false
+        default: main
+        type: string
+      apigee_path:
+        required: false
+        default: apiproxy
+        type: string
+      sonar_project_key:
+        required: true
+        type: string
+      sonar_org:
+        required: true
+        type: string
+
 jobs:
   scan:
     runs-on: ubuntu-latest
