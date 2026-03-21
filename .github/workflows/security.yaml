@@ -44,7 +44,7 @@ jobs:
         with:
           repository: ${{ inputs.remote_repo }}
           ref: ${{ inputs.remote_branch }}
-          token: ${{ secrets.PAT_TOKEN }}  # Must be PAT with repo scope
+          token: ${{ inputs.pat_token }}  # Must be PAT with repo scope
           path: target-repo
 
       # 3️⃣ Setup Node.js
