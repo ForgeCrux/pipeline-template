@@ -1,7 +1,7 @@
 name: Security Apigee & Sonar Scan
 
 on:
-  workflow_call:
+  workflow_dispatch:
     inputs:
       remote_repo:
         required: true
