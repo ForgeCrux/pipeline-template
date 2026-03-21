@@ -78,7 +78,11 @@ jobs:
         continue-on-error: true
         run: |
           jslint target-repo/${{ inputs.apigee_path }}/**/*.js > scan-results/jslint.txt || true
-
+      
+      # 3️⃣ Install SonarScanner CLI
+      - name: Install SonarScanner
+        run: npm install -g sonarqube-scanner
+  
       # 9️⃣ Run Sonar Scan
       - name: Run Sonar Scan
         run: |
