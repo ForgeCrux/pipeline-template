@@ -20,10 +20,10 @@ on:
       sonar_org:
         required: true
         type: string
-    secrets:
-      SONAR_TOKEN:
+    #secrets:
+      sonar_token:
         required: true
-      PAT_TOKEN:
+      pat_token:
         required: true
 
 env:
@@ -64,7 +64,7 @@ jobs:
           repository: ForgeCrux/apigee-linting-custom
           ref: develop
           path: apigee-linting-custom
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ secrets.pat_token }}
 
       # 6️⃣ Prepare scan-results folder
       - name: Prepare scan folder
@@ -94,7 +94,7 @@ jobs:
             -Dsonar.organization=${{ inputs.sonar_org }} \
             -Dsonar.sources=./target-repo \
             -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.login=${{ inputs.sonar_token }} \
             > scan-results/sonar.txt || true
 
       # 🔟 Combine all results
