@@ -64,7 +64,7 @@ jobs:
           repository: ForgeCrux/apigee-linting-custom
           ref: develop
           path: apigee-linting-custom
-          token: ${{ secrets.pat_token }}
+          token: ${{ inputs.pat_token }}
 
       # 6️⃣ Prepare scan-results folder
       - name: Prepare scan folder
