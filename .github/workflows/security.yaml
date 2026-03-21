@@ -1,0 +1,89 @@
+name: Security Apigee & Sonar Scan
+
+on:
+  workflow_call:
+    inputs:
+      remote_repo:
+        required: true
+        type: string
+      remote_branch:
+        required: false
+        default: main
+        type: string
+      apigee_path:
+        required: false
+        default: apiproxy
+        type: string
+      sonar_project_key:
+        required: true
+        type: string
+      sonar_org:
+        required: true
+        type: string
+    secrets:
+      SONAR_TOKEN:
+        required: true
+      PAT_TOKEN:
+        required: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout calling repo (optional)
+      - name: Checkout current repo
+        uses: actions/checkout@v3
+
+      # 2. Checkout remote repo (dynamic)
+      - name: Checkout remote repo
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ inputs.remote_repo }}
+          ref: ${{ inputs.remote_branch }}
+          token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          path: target-repo
+
+      # 3. Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      # 4. Install ApigeeLint
+      - name: Install ApigeeLint
+        run: npm install -g apigeelint
+
+      # 5. Run ApigeeLint
+      - name: Run ApigeeLint
+        run: |
+          mkdir -p scan-results
+          apigeelint -d ./target-repo/${{ inputs.apigee_path }} > scan-results/apigeelint.txt || true
+
+      # 6. Install Sonar Scanner (if not available)
+      - name: Install SonarScanner
+        run: |
+          npm install -g sonarqube-scanner
+
+      # 7. Run Sonar Scan
+      - name: Run Sonar Scan
+        run: |
+          sonar-scanner \
+            -Dsonar.projectKey=${{ inputs.sonar_project_key }} \
+            -Dsonar.organization=${{ inputs.sonar_org }} \
+            -Dsonar.sources=./target-repo \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
+            > scan-results/sonar.txt || true
+
+      # 8. Combine results
+      - name: Combine results
+        run: |
+          cat scan-results/apigeelint.txt scan-results/sonar.txt > scan-results/final-report.txt
+
+      # 9. Upload artifact
+      - name: Upload scan results
+        uses: actions/upload-artifact@v3
+        with:
+          name: scan-results
+          path: scan-results/
