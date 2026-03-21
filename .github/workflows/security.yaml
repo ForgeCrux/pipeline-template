@@ -77,7 +77,7 @@ jobs:
       - name: JS Lint
         continue-on-error: true
         run: |
-          jslint target-repo/${{ inputs.apigee_path }}/**/*.js >> scan-results/apigeelint.txt || true
+          jslint target-repo/${{ inputs.apigee_path }}/**/*.js > scan-results/jslint.txt || true
 
       # 9️⃣ Run Sonar Scan
       - name: Run Sonar Scan
@@ -93,7 +93,7 @@ jobs:
       # 🔟 Combine all results
       - name: Combine results
         run: |
-          cat scan-results/apigeelint.txt scan-results/sonar.txt > scan-results/final-report.txt
+          cat scan-results/apigeelint.txt scan-results/jslint.txt scan-results/sonar.txt > scan-results/final-report.txt
           echo "Combined scan report created."
 
       # 1️⃣1️⃣ Upload artifact
