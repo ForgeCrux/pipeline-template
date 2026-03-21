@@ -31,30 +31,30 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout calling repo (optional)
+      # 1️⃣ Checkout calling repo (optional)
       - name: Checkout current repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      # 2. Checkout remote repo (dynamic)
+      # 2️⃣ Checkout target remote repo
       - name: Checkout remote repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ inputs.remote_repo }}
           ref: ${{ inputs.remote_branch }}
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN }}  # Must be PAT with repo scope
           path: target-repo
 
-      # 3. Setup Node.js
+      # 3️⃣ Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
 
-      # 4. Install ApigeeLint
+      # 4️⃣ Install ApigeeLint
       - name: Install ApigeeLint
-        run: npm install -g apigeelint
+        run: npm install -g apigeelint jslint
 
-      # 5. Checkout lint rules
+      # 5️⃣ Checkout custom lint rules
       - name: Checkout lint rules
         uses: actions/checkout@v4
         with:
@@ -62,21 +62,24 @@ jobs:
           ref: develop
           path: apigee-linting-custom
           token: ${{ secrets.PAT_TOKEN }}
-      
-      # 6️ Apigee Lint
+
+      # 6️⃣ Prepare scan-results folder
+      - name: Prepare scan folder
+        run: mkdir -p scan-results
+
+      # 7️⃣ Run Apigee Lint
       - name: Apigee Lint
         continue-on-error: true
         run: |
-          apigeelint -s apiproxy -x ./apigee-linting-custom/rules -f table.js > scan-results/apigeelint.txt || true
+          apigeelint -s target-repo/${{ inputs.apigee_path }} -x ./apigee-linting-custom/rules -f table.js > scan-results/apigeelint.txt || true
 
-      # 7️ JavaScript Lint
+      # 8️⃣ Run JavaScript Lint
       - name: JS Lint
         continue-on-error: true
         run: |
-          set -e
-          jslint apiproxy/**/*.js > scan-results/apigeelint.txt || true
+          jslint target-repo/${{ inputs.apigee_path }}/**/*.js >> scan-results/apigeelint.txt || true
 
-      # 8. Run Sonar Scan
+      # 9️⃣ Run Sonar Scan
       - name: Run Sonar Scan
         run: |
           sonar-scanner \
@@ -87,12 +90,13 @@ jobs:
             -Dsonar.login=${{ secrets.SONAR_TOKEN }} \
             > scan-results/sonar.txt || true
 
-      # 8. Combine results
+      # 🔟 Combine all results
       - name: Combine results
         run: |
           cat scan-results/apigeelint.txt scan-results/sonar.txt > scan-results/final-report.txt
+          echo "Combined scan report created."
 
-      # 9. Upload artifact
+      # 1️⃣1️⃣ Upload artifact
       - name: Upload scan results
         uses: actions/upload-artifact@v4
         with:
