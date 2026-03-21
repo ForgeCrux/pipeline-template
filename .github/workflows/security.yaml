@@ -54,18 +54,29 @@ jobs:
       - name: Install ApigeeLint
         run: npm install -g apigeelint
 
-      # 5. Run ApigeeLint
-      - name: Run ApigeeLint
+      # 5. Checkout lint rules
+      - name: Checkout lint rules
+        uses: actions/checkout@v4
+        with:
+          repository: ForgeCrux/apigee-linting-custom
+          ref: develop
+          path: apigee-linting-custom
+          token: ${{ secrets.PAT_TOKEN }}
+      
+      # 6️ Apigee Lint
+      - name: Apigee Lint
+        continue-on-error: true
         run: |
-          mkdir -p scan-results
-          apigeelint -d ./target-repo/${{ inputs.apigee_path }} > scan-results/apigeelint.txt || true
+          apigeelint -s apiproxy -x ./apigee-linting-custom/rules -f table.js > scan-results/apigeelint.txt || true
 
-      # 6. Install Sonar Scanner (if not available)
-      - name: Install SonarScanner
+      # 7️ JavaScript Lint
+      - name: JS Lint
+        continue-on-error: true
         run: |
-          npm install -g sonarqube-scanner
+          set -e
+          jslint apiproxy/**/*.js > scan-results/apigeelint.txt || true
 
-      # 7. Run Sonar Scan
+      # 8. Run Sonar Scan
       - name: Run Sonar Scan
         run: |
           sonar-scanner \
