@@ -56,7 +56,7 @@ jobs:
           echo "Downloading $ZIP_URL"
           curl -L -H "Authorization: token ${{ inputs.pat_token }}" \
                   -H "Accept: application/vnd.github+json" \
-                   $ZIP_URL -o repo.zip
+                   ${{ inputs.zip_url }} -o repo.zip
           mkdir -p target-repo
           unzip repo.zip -d temp-repo
           # Move contents (zip extracts into a folder with random suffix)
