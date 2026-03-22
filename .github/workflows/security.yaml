@@ -53,7 +53,7 @@ jobs:
       # 2️⃣ Download ZIP File
       - name: Download ZIP file
         run: |
-          echo "Downloading $ZIP_URL"
+          echo "Downloading ${{ inputs.zip_url }} files"
           curl -L -H "Authorization: token ${{ inputs.pat_token }}" \
                   -H "Accept: application/vnd.github+json" \
                    ${{ inputs.zip_url }} -o repo.zip
