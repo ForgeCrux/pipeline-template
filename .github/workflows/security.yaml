@@ -60,7 +60,7 @@ jobs:
           mkdir -p target-repo/apiproxy
           unzip repo.zip -d temp-repo
           # Move contents (zip extracts into a folder with random suffix)
-          mv temp-repo/*/* target-repo/
+          mv temp-repo/*/* target-repo/apiproxy/
           rm -rf repo.zip temp-repo
           ls -la target-repo/
 
