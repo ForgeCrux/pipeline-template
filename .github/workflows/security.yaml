@@ -1,7 +1,7 @@
 name: Security Apigee & Sonar Scan
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       #remote_repo:
       #  required: true
@@ -26,8 +26,10 @@ on:
     #secrets:
       sonar_token:
         required: true
+        type: string
       pat_token:
         required: true
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true 
