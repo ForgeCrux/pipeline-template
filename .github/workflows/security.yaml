@@ -20,6 +20,9 @@ on:
       sonar_org:
         required: true
         type: string
+      zip_url:
+        required: true
+        type: string
     #secrets:
       sonar_token:
         required: true
@@ -39,13 +42,26 @@ jobs:
         uses: actions/checkout@v4
 
       # 2️⃣ Checkout target remote repo
-      - name: Checkout remote repo
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.remote_repo }}
-          ref: ${{ inputs.remote_branch }}
-          token: ${{ inputs.pat_token }}  # Must be PAT with repo scope
-          path: target-repo
+      #- name: Checkout remote repo
+      #  uses: actions/checkout@v4
+      #  with:
+      #    repository: ${{ inputs.remote_repo }}
+      #    ref: ${{ inputs.remote_branch }}
+      #    token: ${{ inputs.pat_token }}  # Must be PAT with repo scope
+      #    path: target-repo
+      
+      # 2️⃣ Download ZIP File
+      - name: Download ZIP file
+        run: |
+          echo "Downloading $ZIP_URL"
+          curl -L -H "Authorization: token ${{ inputs.pat_token }}" \
+                  -H "Accept: application/vnd.github+json" \
+                   $ZIP_URL -o repo.zip
+          mkdir -p target-repo
+          unzip repo.zip -d temp-repo
+          # Move contents (zip extracts into a folder with random suffix)
+          mv temp-repo/*/* target-repo/
+          rm -rf repo.zip temp-repo
 
       # 3️⃣ Setup Node.js
       - name: Setup Node.js
