@@ -62,6 +62,7 @@ jobs:
           # Move contents (zip extracts into a folder with random suffix)
           mv temp-repo/*/* target-repo/
           rm -rf repo.zip temp-repo
+          ls -la target-repo/
 
       # 3️⃣ Setup Node.js
       - name: Setup Node.js
