@@ -56,7 +56,6 @@ jobs:
       - name: Download ZIP file
         run: |
           echo "Downloading ${{ inputs.zip_url }} files"
-          echo "${{ github.run_id }}" > scan-results/run_id.txt
           curl -L -H "Authorization: token ${{ inputs.pat_token }}" \
                   -H "Accept: application/vnd.github+json" \
                    ${{ inputs.zip_url }} -o repo.zip
@@ -88,7 +87,7 @@ jobs:
 
       # 6️⃣ Prepare scan-results folder
       - name: Prepare scan folder
-        run: mkdir -p scan-results
+        run: mkdir -p scan-results && echo "${{ github.run_id }}" > scan-results/run_id.txt
 
       # 7️⃣ Run Apigee Lint
       - name: Apigee Lint
