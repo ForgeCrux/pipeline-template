@@ -28,8 +28,9 @@ env:
 
 jobs:
   bootstrap-repo:
-    runs-on: [self-hosted, kubernetes, org-runner]
-
+    #runs-on: [self-hosted, kubernetes, org-runner]
+    runs-on: ubuntu-latest
+     
     steps:
       - name: 🧾 Set variables
         run: |
