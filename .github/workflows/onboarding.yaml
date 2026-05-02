@@ -12,14 +12,6 @@ on:
       repo_name:
         description: "New repository name"
         required: true
-      visibility:
-        description: "Repository visibility"
-        required: true
-        default: "private"
-        type: choice
-        options:
-          - private
-          - public
 
 env:
   ORG_NAME: ForgeCrux
@@ -28,7 +20,6 @@ env:
 
 jobs:
   bootstrap-repo:
-    #runs-on: [self-hosted, kubernetes, org-runner]
     runs-on: ubuntu-latest
      
     steps:
@@ -37,14 +28,14 @@ jobs:
           echo "REPO_NAME=${{ inputs.repo_name }}" >> $GITHUB_ENV
           echo "WORKDIR=/tmp/${{ inputs.repo_name }}" >> $GITHUB_ENV
 
-      - name: 🚀 Create repository
+      - name: 🚀 Create repository (ALWAYS PUBLIC)
         run: |
           curl -s -X POST "https://api.github.com/orgs/${ORG_NAME}/repos" \
             -H "Authorization: token ${{ secrets.ORG_GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             -d "{
               \"name\": \"${REPO_NAME}\",
-              \"visibility\": \"${{ inputs.visibility }}\",
+              \"visibility\": \"public\",
               \"auto_init\": true
             }"
 
