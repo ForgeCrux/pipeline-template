@@ -98,13 +98,22 @@ jobs:
           git config --global url."https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/".insteadOf "https://github.com/"
           
        # 6️⃣ Checkout lint rules
+      # 🔑 Generate GitHub App token
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      # 📦 Checkout lint rules
       - name: Checkout lint rules
         uses: actions/checkout@v4
         with:
           repository: ForgeCrux/apigee-linting-custom
           ref: develop
           path: apigee-linting-custom
-          token: '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'
+          token: ${{ steps.app-token.outputs.token }}
       
       # 6️⃣ Apigee Lint
       - name: Apigee Lint
