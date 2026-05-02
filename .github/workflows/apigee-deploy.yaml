@@ -1,4 +1,7 @@
-name: Apigee Deploy (Service Account Key)
+name: Apigee Deploy
+
+# Unique run name for tracking
+run-name: Deploy ${{ inputs.deploy_proxy }} | ${{ inputs.run_key }}
 
 on:
   workflow_dispatch:
@@ -11,17 +14,30 @@ on:
         required: true
       zip_url:
         required: true
+      run_key:
+        required: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
+      # Print run info (for tracking)
+      - name: Print Run Info
+        run: |
+          echo "Run ID: $GITHUB_RUN_ID"
+          echo "Run URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "RUN_KEY: ${{ inputs.run_key }}"
+
       # Install dependencies
       - name: Install tools
         run: |
           sudo apt-get update
           sudo apt-get install -y jq unzip
+
+      # Setup gcloud (safe)
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
 
       # Write JSON key from secret
       - name: Create Service Account File
@@ -34,7 +50,7 @@ jobs:
           gcloud auth activate-service-account \
             --key-file=key.json
 
-      # Get token (AUTOMATED every run)
+      # Get token
       - name: Get Access Token
         id: token
         run: |
@@ -46,13 +62,14 @@ jobs:
         run: |
           curl -L -o proxy.zip "${{ inputs.zip_url }}"
 
-      # Extract
+      # Extract ZIP
       - name: Extract Proxy
         run: |
           unzip proxy.zip -d extracted
+          echo "Extracted structure:"
           ls -R extracted
 
-      # Locate apiproxy
+      # Locate apiproxy folder
       - name: Locate apiproxy
         id: locate
         run: |
@@ -63,16 +80,21 @@ jobs:
             exit 1
           fi
 
+          echo "Found apiproxy at: $PROXY_DIR"
           echo "proxy_dir=$PROXY_DIR" >> $GITHUB_OUTPUT
 
-      # Package correctly
+      # Repackage correctly
       - name: Package Proxy
         run: |
           cd $(dirname "${{ steps.locate.outputs.proxy_dir }}")
           zip -r proxy.zip apiproxy
           mv proxy.zip $GITHUB_WORKSPACE/
 
-      # Import proxy
+      # Debug ZIP
+      - name: Debug ZIP
+        run: unzip -l proxy.zip
+
+      # Import Proxy
       - name: Import Proxy
         run: |
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
@@ -88,7 +110,7 @@ jobs:
             exit 1
           fi
 
-      # Get revision
+      # Get latest revision
       - name: Get Revision
         id: revision
         run: |
@@ -96,9 +118,10 @@ jobs:
           "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}/revisions" \
           | jq -r 'map(tonumber) | max')
 
+          echo "revision=$REV"
           echo "revision=$REV" >> $GITHUB_OUTPUT
 
-      # Deploy
+      # Deploy proxy
       - name: Deploy Proxy
         run: |
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
@@ -115,8 +138,8 @@ jobs:
             exit 1
           fi
 
-      # Verify
-      - name: Verify
+      # Verify deployment
+      - name: Verify Deployment
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
@@ -128,3 +151,8 @@ jobs:
           fi
 
           echo "Deployment successful"
+
+      # Cleanup (security best practice)
+      - name: Cleanup
+        if: always()
+        run: rm -f key.json
