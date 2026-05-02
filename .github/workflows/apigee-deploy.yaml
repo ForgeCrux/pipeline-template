@@ -1,6 +1,23 @@
 name: Apigee Deploy Only Pipeline
 
 on:
+  # Allow API trigger
+  workflow_dispatch:
+    inputs:
+      apigee_org:
+        description: "Apigee Organization"
+        required: true
+        type: string
+      apigee_env:
+        description: "Apigee Environment"
+        required: true
+        type: string
+      deploy_proxy:
+        description: "Proxy Name"
+        required: true
+        type: string
+
+  # Allow reuse from other workflows
   workflow_call:
     inputs:
       apigee_org:
@@ -12,15 +29,10 @@ on:
       deploy_proxy:
         required: true
         type: string
-    secrets:
-      WL_IDENTITY:
-        required: true
-      SERVICE_ACCOUNT:
-        required: true
 
 permissions:
   contents: read
-  id-token: write   # REQUIRED for Workload Identity
+  id-token: write
 
 jobs:
   deploy-proxy:
@@ -31,6 +43,10 @@ jobs:
       # Checkout repo
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # Install jq (needed for revision parsing)
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
 
       # Authenticate to GCP (OIDC)
       - name: GCP Auth
