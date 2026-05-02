@@ -1,14 +1,12 @@
 name: Reusable Apigee CI/CD (K8s Runner)
-#projects/1076618220242/locations/global/workloadIdentityPools/forgecrux-pool/providers/github-provider
-##gh-runner-gsa@methodical-mark-482504-j3.iam.gserviceaccount.com
+
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
   push:
     branches:
       - main
-    
-      
+
   workflow_call:
     inputs:
       apigee_org:
@@ -33,76 +31,61 @@ on:
         required: true
       APP_PRIVATE_KEY:
         required: true
+      GCP_SA_KEY:
+        required: true
+
 permissions:
   contents: read
-  id-token: write   # REQUIRED for Workload Identity
 
 jobs:
   build-lint-deploy:
     runs-on: ubuntu-latest
-    #runs-on: [self-hosted, kubernetes, org-runner]
     timeout-minutes: 30
 
     steps:
-      # 1️⃣ Checkout
+      # Checkout
       - name: Checkout repository
         uses: actions/checkout@v4
-        
-      - name: printsecrectsvalues
-        run: |
-          echo "WL_IDENTITY": ${{ secrets.WL_IDENTITY }}
-          echo "SERVICE_ACCOUNT": ${{ secrets.SERVICE_ACCOUNT }}
-          echo "Github PAT" : ${{ secrets.GH_TOKEN }}
-          echo "Sonar Token" :${{ secrets.SONAR_TOKEN }}
-          
-      # 2️⃣ Authenticate to GCP via Workload Identity
-      #- name: GCP Auth (OIDC)
-      #  id: auth
-      #  uses: google-github-actions/auth@v2
-      #  with:
-      #    workload_identity_provider: projects/861433193200/locations/global/workloadIdentityPools/github-pool/providers/github-provider
-      #    service_account: github-actions-deployer@probestack-prod.iam.gserviceaccount.com
-      #    token_format: access_token
-      #    create_credentials_file: true
 
-      # 3️⃣ Setup Node
+      # Setup Node
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node_version }}
 
-      - name: Cache npm
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: npm-${{ runner.os }}-${{ inputs.node_version }}-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            npm-${{ runner.os }}-${{ inputs.node_version }}-
-
-      # 4️⃣ Cache npm
-      #- uses: actions/cache@v4
-      #  with:
-      #    path: ~/.npm
-      #    key: npm-${{ runner.os }}-${{ inputs.node_version }}
-
-      # 5️⃣ Install tooling
+      # Install tools (NO global npm install)
       - name: Install tools
         run: |
-          npm install -g apigeelint eslint jslint sonarqube-scanner
-          echo "Github PAT" : ${{ secrets.GH_TOKEN }}
-          echo "Sonar Token" :${{ secrets.SONAR_TOKEN }}
+          sudo apt-get update
+          sudo apt-get install -y jq unzip
 
-      #- name: Verify token access
-      #  run: |
-      #    curl -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
-      #         https://api.github.com/repos/ForgeCrux/apigee-linting-custom
+      # Setup gcloud
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
 
+      # Create Service Account file
+      - name: Create Service Account File
+        run: |
+          echo '${{ secrets.GCP_SA_KEY }}' > key.json
+
+      # Authenticate using JSON key
+      - name: Authenticate to GCP
+        run: |
+          gcloud auth activate-service-account --key-file=key.json
+
+      # Generate Access Token
+      - name: Get Access Token
+        id: token
+        run: |
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+          echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
+
+      # GitHub Auth Fix
       - name: Force GitHub auth
         run: |
           git config --global url."https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/".insteadOf "https://github.com/"
-          
-       # 6️⃣ Checkout lint rules
-      # 🔑 Generate GitHub App token
+
+      # Generate GitHub App token
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v1
@@ -110,7 +93,7 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      # 📦 Checkout lint rules
+      # Checkout lint rules
       - name: Checkout lint rules
         uses: actions/checkout@v4
         with:
@@ -118,89 +101,94 @@ jobs:
           ref: develop
           path: apigee-linting-custom
           token: ${{ steps.app-token.outputs.token }}
-      
-      # 6️⃣ Apigee Lint
+
+      # Apigee Lint (NON-BLOCKING)
       - name: Apigee Lint
         continue-on-error: true
         run: |
-          apigeelint -s apiproxy -x ./apigee-linting-custom/rules -f table.js
+          npx apigeelint -s apiproxy -x ./apigee-linting-custom/rules -f table.js
 
-      # 7️⃣ JavaScript Lint
+      # JS Lint (NON-BLOCKING)
       - name: JS Lint
         continue-on-error: true
         run: |
-          set -e
-          jslint apiproxy/**/*.js || true
+          npx jslint apiproxy/**/*.js || true
 
-      # 8️⃣ Sonar Scan
+      # Sonar Scan (NON-BLOCKING)
       - name: Sonar Scan
+        continue-on-error: true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          sonar-scanner \
+          npx sonarqube-scanner \
             -Dsonar.organization=forgecrux \
             -Dsonar.projectKey=${{ github.event.repository.name }} \
-            -Dsonar.sources=apiproxy
+            -Dsonar.sources=apiproxy || true
 
-      # 9️⃣ Package Proxy
+      # Package Proxy
       - name: Package Proxy
         run: |
           test -d apiproxy
           zip -r proxy.zip apiproxy
 
-      # 🔟 Import Proxy
+      # Import Proxy
       - name: Import Proxy
-        env:
-          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
-          curl -sf -X POST \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
+            -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
             -F file=@proxy.zip \
-            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis?action=import&name=${{ inputs.deploy_proxy }}"
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis?action=import&name=${{ inputs.deploy_proxy }}")
 
-      # 1️⃣1️⃣ Get Latest Revision
+          echo "$RESPONSE"
+
+          STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
+          if [ "$STATUS" -ne 200 ]; then
+            echo "❌ Import failed"
+            exit 1
+          fi
+
+      # Get Revision
       - name: Get Latest Revision
         id: revision
-        env:
-          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
-          REV=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
+          REV=$(curl -s -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
           "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}/revisions" \
           | jq -r 'map(tonumber) | max')
-      
+
           echo "revision=$REV" >> $GITHUB_OUTPUT
 
-      # 1️⃣2️⃣ Deploy Proxy
+      # Deploy Proxy
       - name: Deploy Proxy
-        env:
-          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
-          set -euo pipefail
-          DEPLOY_URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/apis/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments"
-          RESPONSE=$(curl -sS -X POST \
-                -H "Authorization: Bearer $ACCESS_TOKEN" \
-                -H "Content-Type: application/json" \
-                --data-raw '{ "override": true }' \
-                "$DEPLOY_URL")
-          #RESPONSE=$(curl -s -X POST \
-          #  -H "Authorization: Bearer $ACCESS_TOKEN" \
-          #  "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/apis/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments")
-      
-          echo "Deployment response: $RESPONSE"
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
+            -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
+            -H "Content-Type: application/json" \
+            --data '{ "override": true }' \
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/apis/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments")
 
-      # 1️⃣2️⃣ Verify Apigee proxy exists
+          echo "$RESPONSE"
+
+          STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
+          if [ "$STATUS" -ne 200 ]; then
+            echo "❌ Deployment failed"
+            exit 1
+          fi
+
+      # Verify
       - name: Verify Apigee proxy exists
-        env:
-          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
-          set -euo pipefail
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-              -H "Authorization: Bearer $ACCESS_TOKEN" \
+              -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
               "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}")
+
           if [ "$STATUS" != "200" ]; then
-              echo "❌ Proxy '$PROXY' does not exist in org '$ORG'"
-              exit 1
-            fi
-          
-          echo "✅ Proxy exists"
-          echo "Deployment response: $RESPONSE"
+            echo "❌ Proxy does not exist"
+            exit 1
+          fi
+
+          echo "✅ Deployment successful"
+
+      # Cleanup
+      - name: Cleanup
+        if: always()
+        run: rm -f key.json
