@@ -1,11 +1,24 @@
 name: Onboarding Pipeline
 
 on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       repo_name:
         description: "New repository name"
         required: true
+      visibility:
+        description: "Repository visibility"
+        required: true
+        default: "private"
+        type: choice
+        options:
+          - private
+          - public
 
 env:
   ORG_NAME: ForgeCrux
@@ -22,28 +35,16 @@ jobs:
           echo "REPO_NAME=${{ inputs.repo_name }}" >> $GITHUB_ENV
           echo "WORKDIR=/tmp/${{ inputs.repo_name }}" >> $GITHUB_ENV
 
-      - name: 🚀 Create repository (FORCE PUBLIC)
+      - name: 🚀 Create repository
         run: |
-          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
-            "https://api.github.com/orgs/${ORG_NAME}/repos" \
+          curl -s -X POST "https://api.github.com/orgs/${ORG_NAME}/repos" \
             -H "Authorization: token ${{ secrets.ORG_GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             -d "{
               \"name\": \"${REPO_NAME}\",
-              \"private\": false,
-              \"visibility\": \"public\",
-              \"auto_init\": true,
-              \"has_issues\": true
-            }")
-
-          echo "$RESPONSE"
-
-          STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
-
-          if [ "$STATUS" -ne 201 ]; then
-            echo "❌ Repo creation failed"
-            exit 1
-          fi
+              \"visibility\": \"${{ inputs.visibility }}\",
+              \"auto_init\": true
+            }"
 
       - name: 📥 Clone repository
         run: |
