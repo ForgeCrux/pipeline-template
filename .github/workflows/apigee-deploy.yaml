@@ -69,7 +69,7 @@ jobs:
       - name: Extract Proxy Bundle
         run: |
           unzip proxy.zip -d extracted
-          echo "Extracted files:"
+          echo "Extracted structure:"
           ls -R extracted
 
       # Locate apiproxy folder
@@ -93,15 +93,30 @@ jobs:
           zip -r proxy.zip apiproxy
           mv proxy.zip $GITHUB_WORKSPACE/
 
-      # Import Proxy
+      # Debug ZIP structure (CRITICAL)
+      - name: Debug ZIP contents
+        run: |
+          echo "Final ZIP contents:"
+          unzip -l proxy.zip
+
+      # Import Proxy (with proper error handling)
       - name: Import Proxy
         env:
           ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
-          curl -sf -X POST \
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -F file=@proxy.zip \
-            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis?action=import&name=${{ inputs.deploy_proxy }}"
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis?action=import&name=${{ inputs.deploy_proxy }}")
+
+          echo "$RESPONSE"
+
+          STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
+
+          if [ "$STATUS" -ne 200 ]; then
+            echo "Import failed with status $STATUS"
+            exit 1
+          fi
 
       # Get Latest Revision
       - name: Get Latest Revision
@@ -120,11 +135,20 @@ jobs:
         env:
           ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
-          curl -X POST \
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
             --data '{ "override": true }' \
-            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/apis/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments"
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/apis/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments")
+
+          echo "$RESPONSE"
+
+          STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
+
+          if [ "$STATUS" -ne 200 ]; then
+            echo "Deployment failed with status $STATUS"
+            exit 1
+          fi
 
       # Verify Deployment
       - name: Verify Proxy Exists
@@ -136,8 +160,8 @@ jobs:
             "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}")
 
           if [ "$STATUS" != "200" ]; then
-            echo "❌ Proxy not found"
+            echo "Proxy not found"
             exit 1
           fi
 
-          echo "✅ Proxy deployed successfully"
+          echo "Proxy deployed successfully"
