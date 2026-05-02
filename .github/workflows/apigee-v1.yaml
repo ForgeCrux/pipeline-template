@@ -104,7 +104,7 @@ jobs:
           repository: ForgeCrux/apigee-linting-custom
           ref: develop
           path: apigee-linting-custom
-          token: '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'
+          token: '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'
       
       # 6️⃣ Apigee Lint
       - name: Apigee Lint
