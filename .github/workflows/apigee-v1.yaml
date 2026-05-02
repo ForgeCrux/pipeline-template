@@ -53,32 +53,11 @@ jobs:
         with:
           node-version: ${{ inputs.node_version }}
 
-      # Install tools (NO global npm install)
+      # Install tools
       - name: Install tools
         run: |
           sudo apt-get update
           sudo apt-get install -y jq unzip
-
-      # Setup gcloud
-      - name: Setup gcloud
-        uses: google-github-actions/setup-gcloud@v2
-
-      # Create Service Account file
-      - name: Create Service Account File
-        run: |
-          echo '${{ secrets.GCP_SA_KEY }}' > key.json
-
-      # Authenticate using JSON key
-      - name: Authenticate to GCP
-        run: |
-          gcloud auth activate-service-account --key-file=key.json
-
-      # Generate Access Token
-      - name: Get Access Token
-        id: token
-        run: |
-          ACCESS_TOKEN=$(gcloud auth print-access-token)
-          echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
 
       # GitHub Auth Fix
       - name: Force GitHub auth
@@ -102,19 +81,20 @@ jobs:
           path: apigee-linting-custom
           token: ${{ steps.app-token.outputs.token }}
 
-      # Apigee Lint (NON-BLOCKING)
+      # -------------------------
+      # 🔍 LINT + SCAN (NO GCP)
+      # -------------------------
+
       - name: Apigee Lint
         continue-on-error: true
         run: |
-          npx apigeelint -s apiproxy -x ./apigee-linting-custom/rules -f table.js
+          npx apigeelint -s apiproxy -x ./apigee-linting-custom/rules -f table.js || true
 
-      # JS Lint (NON-BLOCKING)
       - name: JS Lint
         continue-on-error: true
         run: |
           npx jslint apiproxy/**/*.js || true
 
-      # Sonar Scan (NON-BLOCKING)
       - name: Sonar Scan
         continue-on-error: true
         env:
@@ -125,13 +105,42 @@ jobs:
             -Dsonar.projectKey=${{ github.event.repository.name }} \
             -Dsonar.sources=apiproxy || true
 
-      # Package Proxy
+      # -------------------------
+      # 📦 PACKAGE
+      # -------------------------
+
       - name: Package Proxy
         run: |
           test -d apiproxy
           zip -r proxy.zip apiproxy
 
-      # Import Proxy
+      # -------------------------
+      # 🔐 GCP AUTH (ONLY HERE)
+      # -------------------------
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Create Service Account File (FIXED)
+        run: |
+          cat <<EOF > key.json
+${{ secrets.GCP_SA_KEY }}
+EOF
+
+      - name: Authenticate to GCP
+        run: |
+          gcloud auth activate-service-account --key-file=key.json
+
+      - name: Get Access Token
+        id: token
+        run: |
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+          echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
+
+      # -------------------------
+      # 🚀 DEPLOY
+      # -------------------------
+
       - name: Import Proxy
         run: |
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
@@ -147,7 +156,6 @@ jobs:
             exit 1
           fi
 
-      # Get Revision
       - name: Get Latest Revision
         id: revision
         run: |
@@ -157,7 +165,6 @@ jobs:
 
           echo "revision=$REV" >> $GITHUB_OUTPUT
 
-      # Deploy Proxy
       - name: Deploy Proxy
         run: |
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
@@ -174,8 +181,7 @@ jobs:
             exit 1
           fi
 
-      # Verify
-      - name: Verify Apigee proxy exists
+      - name: Verify Deployment
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
