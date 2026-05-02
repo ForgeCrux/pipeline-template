@@ -1,142 +1,108 @@
-name: Apigee Deploy Only Pipeline
+name: Apigee Deploy (Service Account Key)
 
 on:
   workflow_dispatch:
     inputs:
       apigee_org:
-        description: "Apigee Organization"
         required: true
-        type: string
-      apigee_env:
-        description: "Apigee Environment"
-        required: true
-        type: string
-      deploy_proxy:
-        description: "Proxy Name"
-        required: true
-        type: string
-      zip_url:
-        description: "Proxy bundle ZIP URL"
-        required: true
-        type: string
-
-  workflow_call:
-    inputs:
-      apigee_org:
-        required: true
-        type: string
       apigee_env:
         required: true
-        type: string
       deploy_proxy:
         required: true
-        type: string
       zip_url:
         required: true
-        type: string
-
-permissions:
-  contents: read
-  id-token: write
 
 jobs:
-  deploy-proxy:
+  deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
 
     steps:
-      # Install tools
+      # Install dependencies
       - name: Install tools
         run: |
           sudo apt-get update
           sudo apt-get install -y jq unzip
 
-      # Authenticate to GCP
-      - name: GCP Auth
-        id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.WL_IDENTITY }}
-          service_account: ${{ secrets.SERVICE_ACCOUNT }}
-          token_format: access_token
+      # Write JSON key from secret
+      - name: Create Service Account File
+        run: |
+          echo '${{ secrets.GCP_SA_KEY }}' > key.json
 
-      # Download proxy ZIP
-      - name: Download Proxy Bundle
+      # Authenticate
+      - name: Authenticate to GCP
+        run: |
+          gcloud auth activate-service-account \
+            --key-file=key.json
+
+      # Get token (AUTOMATED every run)
+      - name: Get Access Token
+        id: token
+        run: |
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+          echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
+
+      # Download proxy
+      - name: Download Proxy
         run: |
           curl -L -o proxy.zip "${{ inputs.zip_url }}"
 
-      # Extract ZIP
-      - name: Extract Proxy Bundle
+      # Extract
+      - name: Extract Proxy
         run: |
           unzip proxy.zip -d extracted
-          echo "Extracted structure:"
           ls -R extracted
 
-      # Locate apiproxy folder
+      # Locate apiproxy
       - name: Locate apiproxy
         id: locate
         run: |
           PROXY_DIR=$(find extracted -type d -name apiproxy | head -n 1)
 
           if [ -z "$PROXY_DIR" ]; then
-            echo "apiproxy folder not found in ZIP"
+            echo "apiproxy not found"
             exit 1
           fi
 
-          echo "Found apiproxy at: $PROXY_DIR"
           echo "proxy_dir=$PROXY_DIR" >> $GITHUB_OUTPUT
 
-      # Repackage correctly
+      # Package correctly
       - name: Package Proxy
         run: |
           cd $(dirname "${{ steps.locate.outputs.proxy_dir }}")
           zip -r proxy.zip apiproxy
           mv proxy.zip $GITHUB_WORKSPACE/
 
-      # Debug ZIP structure (CRITICAL)
-      - name: Debug ZIP contents
-        run: |
-          echo "Final ZIP contents:"
-          unzip -l proxy.zip
-
-      # Import Proxy (with proper error handling)
+      # Import proxy
       - name: Import Proxy
-        env:
-          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
             -F file=@proxy.zip \
             "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis?action=import&name=${{ inputs.deploy_proxy }}")
 
           echo "$RESPONSE"
 
           STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
-
           if [ "$STATUS" -ne 200 ]; then
-            echo "Import failed with status $STATUS"
+            echo "Import failed"
             exit 1
           fi
 
-      # Get Latest Revision
-      - name: Get Latest Revision
+      # Get revision
+      - name: Get Revision
         id: revision
-        env:
-          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
-          REV=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
+          REV=$(curl -s -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
           "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}/revisions" \
           | jq -r 'map(tonumber) | max')
 
           echo "revision=$REV" >> $GITHUB_OUTPUT
 
-      # Deploy Proxy
+      # Deploy
       - name: Deploy Proxy
-        env:
-          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
             -H "Content-Type: application/json" \
             --data '{ "override": true }' \
             "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/apis/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments")
@@ -144,19 +110,16 @@ jobs:
           echo "$RESPONSE"
 
           STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
-
           if [ "$STATUS" -ne 200 ]; then
-            echo "Deployment failed with status $STATUS"
+            echo "Deployment failed"
             exit 1
           fi
 
-      # Verify Deployment
-      - name: Verify Proxy Exists
-        env:
-          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+      # Verify
+      - name: Verify
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
             "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}")
 
           if [ "$STATUS" != "200" ]; then
@@ -164,4 +127,4 @@ jobs:
             exit 1
           fi
 
-          echo "Proxy deployed successfully"
+          echo "Deployment successful"
