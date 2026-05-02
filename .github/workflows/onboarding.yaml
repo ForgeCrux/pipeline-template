@@ -28,6 +28,7 @@ jobs:
           echo "REPO_NAME=${{ inputs.repo_name }}" >> $GITHUB_ENV
           echo "WORKDIR=/tmp/${{ inputs.repo_name }}" >> $GITHUB_ENV
 
+      # 🔥 FORCE PUBLIC REPO (ONLY correct approach)
       - name: 🚀 Create repository (ALWAYS PUBLIC)
         run: |
           curl -s -X POST "https://api.github.com/orgs/${ORG_NAME}/repos" \
@@ -35,7 +36,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -d "{
               \"name\": \"${REPO_NAME}\",
-              \"visibility\": \"public\",
+              \"private\": false,
               \"auto_init\": true
             }"
 
