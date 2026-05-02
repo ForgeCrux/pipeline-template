@@ -53,12 +53,11 @@ jobs:
         with:
           node-version: ${{ inputs.node_version }}
 
-      # Install tools
+      # Install tools (NO global npm install)
       - name: Install tools
         run: |
           sudo apt-get update
           sudo apt-get install -y jq unzip
-          npm install -g apigeelint eslint jslint sonarqube-scanner
 
       # Setup gcloud
       - name: Setup gcloud
@@ -107,13 +106,13 @@ jobs:
       - name: Apigee Lint
         continue-on-error: true
         run: |
-          apigeelint -s apiproxy -x ./apigee-linting-custom/rules -f table.js
+          npx apigeelint -s apiproxy -x ./apigee-linting-custom/rules -f table.js
 
       # JS Lint (NON-BLOCKING)
       - name: JS Lint
         continue-on-error: true
         run: |
-          jslint apiproxy/**/*.js || true
+          npx jslint apiproxy/**/*.js || true
 
       # Sonar Scan (NON-BLOCKING)
       - name: Sonar Scan
@@ -121,7 +120,7 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          sonar-scanner \
+          npx sonarqube-scanner \
             -Dsonar.organization=forgecrux \
             -Dsonar.projectKey=${{ github.event.repository.name }} \
             -Dsonar.sources=apiproxy || true
@@ -144,7 +143,7 @@ jobs:
 
           STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
           if [ "$STATUS" -ne 200 ]; then
-            echo "Import failed"
+            echo "❌ Import failed"
             exit 1
           fi
 
@@ -171,7 +170,7 @@ jobs:
 
           STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
           if [ "$STATUS" -ne 200 ]; then
-            echo "Deployment failed"
+            echo "❌ Deployment failed"
             exit 1
           fi
 
@@ -183,11 +182,11 @@ jobs:
               "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}")
 
           if [ "$STATUS" != "200" ]; then
-            echo "Proxy does not exist"
+            echo "❌ Proxy does not exist"
             exit 1
           fi
 
-          echo "Deployment successful"
+          echo "✅ Deployment successful"
 
       # Cleanup
       - name: Cleanup
