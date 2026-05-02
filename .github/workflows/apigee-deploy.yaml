@@ -1,0 +1,97 @@
+name: Apigee Deploy Only Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      apigee_org:
+        required: true
+        type: string
+      apigee_env:
+        required: true
+        type: string
+      deploy_proxy:
+        required: true
+        type: string
+    secrets:
+      WL_IDENTITY:
+        required: true
+      SERVICE_ACCOUNT:
+        required: true
+
+permissions:
+  contents: read
+  id-token: write   # REQUIRED for Workload Identity
+
+jobs:
+  deploy-proxy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # Checkout repo
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Authenticate to GCP (OIDC)
+      - name: GCP Auth
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WL_IDENTITY }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT }}
+          token_format: access_token
+
+      # Package Proxy
+      - name: Package Proxy
+        run: |
+          test -d apiproxy
+          zip -r proxy.zip apiproxy
+
+      # Import Proxy
+      - name: Import Proxy
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          curl -sf -X POST \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -F file=@proxy.zip \
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis?action=import&name=${{ inputs.deploy_proxy }}"
+
+      # Get Latest Revision
+      - name: Get Latest Revision
+        id: revision
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          REV=$(curl -s -H "Authorization: Bearer $ACCESS_TOKEN" \
+          "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}/revisions" \
+          | jq -r 'map(tonumber) | max')
+
+          echo "revision=$REV" >> $GITHUB_OUTPUT
+
+      # Deploy Proxy
+      - name: Deploy Proxy
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{ "override": true }' \
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/apis/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments"
+
+      # Verify Deployment
+      - name: Verify Proxy Exists
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}")
+
+          if [ "$STATUS" != "200" ]; then
+            echo "❌ Proxy not found"
+            exit 1
+          fi
+
+          echo "Proxy deployed successfully"
