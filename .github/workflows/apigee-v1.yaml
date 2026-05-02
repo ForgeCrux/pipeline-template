@@ -1,8 +1,7 @@
 name: Reusable Apigee CI/CD (K8s Runner)
 
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened]
+  # ❌ REMOVED pull_request_target (it blocks secrets)
   push:
     branches:
       - main
