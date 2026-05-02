@@ -1,7 +1,6 @@
 name: Reusable Apigee CI/CD (K8s Runner)
 
 on:
-  # ❌ REMOVED pull_request_target (it blocks secrets)
   push:
     branches:
       - main
@@ -137,7 +136,22 @@ jobs:
 
       - name: Create Service Account File
         run: |
-          printf '%s' '${{ secrets.GCP_SA_KEY }}' > key.json
+          cat > key.json <<'EOF'
+              {
+                "type": "service_account",
+                "project_id": "gen-ai-poc-onboarding",
+                "private_key_id": "c31746b3b6e307d95c455787578a1e96c4cb6287",
+                "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDHWI4PizihDMCB\nk5zSgdk28TXv82HC7UD9MTROtN6Uaseux2lIbM2jsXKVAIrepjezFkSy4pBp1USj\nr1RfAhgj5Cp3jWBA3siSfk3TWpjoRquQUzG2VF/TnvuYRVZiY/91iC5AahzDbopO\n4Oh/0w8wUIFJg0ZPtAXqLhGCDg9Q09thK4/FPp49bzc4pOnpd8cKnczXcBsFf7eB\nX6panpyNQ6G4FrdBVOTlxPGIx5PiiXij2YrFqYgvD/oUoXKA3CbOJRZHVmWgy+XO\nTUP8hA3UeLPT1XB6mdP7sUNUmDPg4zgV2MRm5PHaUc/06R6afvQ+qp34siktPaxM\nL0jBI4T/AgMBAAECggEAGxhhHXbAaI+EU6Md49+iB8hAcGVwinSsv91iF+KYsFaq\niTScjatlm2l2mA8d+7EJuBiqQiBDyHF5phVM4/8JC0krhoVw/vrpCz8J/VTT8hpi\nSQ3YdMkXdKWoL+RuH0B/9q3fD4KndzQoA3GpgxpLzGGHjoI+hSiEd0tHYO81S2Mg\nCcwz7nj3LquGHgSL+kkiJAHvmviYAv9PO8RFJxtsIM+pOrDaERCrcnJjQw9KLi53\nTMwBKxb9CjrouJdrmPEYquHzisHpdbG/MihUcKqhT5e2HS7qcig73nCbFkXMV7P7\ngtWVljAudIvN6+DNT0QCpqG7peJwwYJ2W6dXlbbEmQKBgQD6IFCExJWxoc49wzAy\nask3dnyqUi4TmcUt5xc2OL5SthfvSqPe5s3z5mEvR+i6tknskrjiwORhyT/XkkNX\n70/3C1ESjTwtsJiymXRqTGRMEe1Af4F03zKKs40uebUsiX7eTn8zWZjOdxe36Uqs\neei39L4SdP//p6owltrbss82KQKBgQDMBvbNhUNvBngA/yrUX14pWdD5dJ4EdoBS\nDtyVxknR6DCpr4V+dNcZJG3ZhNiCYy7Uz74xjgbUJCCV5m1Uc81eIbI4Tt6whKsD\n2QQ1o0Gz6Tn4X6olwU87LjIDomnn6SVFxuqCCuAq26FKegWhtkD9O1tW1TrjNr+/\n35CxonU25wKBgQDvU0oXr02YGD0RZZjRNNHxCqNACL/jq0c6o5nXHLYmx+rg4Gcp\nmWfIjk/BAKoTNOZIwR68gFpFol0+s8lR8z5tH9vjx1WkVgvVH/V+3Dc/fgunohjJ\nLeLbSe+1X2jWA31r0mntRTZrnxIHu+XiYAcnNLtFR8PG57N1KHKislWH+QKBgQCr\n8WaHV7q304zI0kKHDgQt9xqNUIFnI3MLNKkjtCM8OmDgcCKhqtgnwTKucS2B3RJ3\nmMghvR72I6gujC4xURKPNPicSaOUwYnaSUcp6PcTJweK0Rx0ixA5wLm3pGV6Y1rd\nDkFN7Np0Y/nu6Rzb5tuoTiCw8iyZledNTZ0EhvQfmwKBgCFG4JI2Ho/Yf/yWKOKq\nh947EBpHQYLSuhi0pTHPly2//nYyZv8N0VJ3GJ6rbsSlDz2wuLTybiNKp/CA8dp6\nX1qbBHccc5TKpR7VMGT0Xo07V1Rir8A/3IHAqPmzXxGcCIib/WdM8o0CfU8wrVle\nqczP/slBVhhW5CeTVx2XzbOS\n-----END PRIVATE KEY-----\n",
+                "client_email": "apigeex-nonprod@gen-ai-poc-onboarding.iam.gserviceaccount.com",
+                "client_id": "111166832922642054542",
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/apigeex-nonprod%40gen-ai-poc-onboarding.iam.gserviceaccount.com",
+                "universe_domain": "googleapis.com"
+              }
+
+              EOF
 
       - name: Authenticate to GCP
         run: |
