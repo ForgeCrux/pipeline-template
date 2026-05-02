@@ -43,53 +43,41 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      # -------------------------
-      # CHECKOUT
-      # -------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # -------------------------
-      # SETUP NODE
-      # -------------------------
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node_version }}
 
-      # -------------------------
-      # INSTALL TOOLS
-      # -------------------------
       - name: Install tools
         run: |
           sudo apt-get update
           sudo apt-get install -y jq unzip
 
-      # -------------------------
-      # GITHUB AUTH
-      # -------------------------
       - name: Force GitHub auth
         run: |
           git config --global url."https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
+      # FIX 1: Do not fail if this step fails
       - name: Generate GitHub App token
         id: app-token
+        continue-on-error: true
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
+      # FIX 2: fallback logic
       - name: Checkout lint rules
         uses: actions/checkout@v4
         with:
           repository: ForgeCrux/apigee-linting-custom
           ref: develop
           path: apigee-linting-custom
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ steps.app-token.outputs.token || secrets.GH_TOKEN }}
 
-      # -------------------------
-      # 🔍 LINT + SCAN (NON-BLOCKING)
-      # -------------------------
       - name: Apigee Lint
         continue-on-error: true
         run: |
@@ -110,17 +98,11 @@ jobs:
             -Dsonar.projectKey=${{ github.event.repository.name }} \
             -Dsonar.sources=apiproxy || true
 
-      # -------------------------
-      # 📦 PACKAGE
-      # -------------------------
       - name: Package Proxy
         run: |
           test -d apiproxy
           zip -r proxy.zip apiproxy
 
-      # -------------------------
-      # 🔐 GCP AUTH (ONLY HERE)
-      # -------------------------
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
@@ -138,9 +120,6 @@ jobs:
           ACCESS_TOKEN=$(gcloud auth print-access-token)
           echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
 
-      # -------------------------
-      # 🚀 IMPORT PROXY
-      # -------------------------
       - name: Import Proxy
         run: |
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
@@ -148,17 +127,12 @@ jobs:
             -F file=@proxy.zip \
             "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis?action=import&name=${{ inputs.deploy_proxy }}")
 
-          echo "$RESPONSE"
-
           STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
           if [ "$STATUS" -ne 200 ]; then
-            echo "❌ Import failed"
+            echo "Import failed"
             exit 1
           fi
 
-      # -------------------------
-      # 📌 GET REVISION
-      # -------------------------
       - name: Get Latest Revision
         id: revision
         run: |
@@ -168,9 +142,6 @@ jobs:
 
           echo "revision=$REV" >> $GITHUB_OUTPUT
 
-      # -------------------------
-      # 🚀 DEPLOY
-      # -------------------------
       - name: Deploy Proxy
         run: |
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
@@ -179,17 +150,12 @@ jobs:
             --data '{ "override": true }' \
             "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/apis/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments")
 
-          echo "$RESPONSE"
-
           STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
           if [ "$STATUS" -ne 200 ]; then
-            echo "❌ Deployment failed"
+            echo "Deployment failed"
             exit 1
           fi
 
-      # -------------------------
-      # ✅ VERIFY
-      # -------------------------
       - name: Verify Deployment
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -197,15 +163,12 @@ jobs:
               "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}")
 
           if [ "$STATUS" != "200" ]; then
-            echo "❌ Proxy does not exist"
+            echo "Proxy does not exist"
             exit 1
           fi
 
-          echo "✅ Deployment successful"
+          echo "Deployment successful"
 
-      # -------------------------
-      # 🧹 CLEANUP
-      # -------------------------
       - name: Cleanup
         if: always()
         run: rm -f key.json
