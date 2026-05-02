@@ -60,7 +60,9 @@ jobs:
         run: |
           git config --global url."https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
-      # FIX 1: Do not fail if this step fails
+      # -------------------------
+      # OPTIONAL GITHUB APP TOKEN
+      # -------------------------
       - name: Generate GitHub App token
         id: app-token
         continue-on-error: true
@@ -69,19 +71,41 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      # FIX 2: fallback logic
+      # -------------------------
+      # SAFE TOKEN FALLBACK
+      # -------------------------
+      - name: Select Token
+        id: token-select
+        run: |
+          if [ -n "${{ steps.app-token.outputs.token }}" ]; then
+            echo "token=${{ steps.app-token.outputs.token }}" >> $GITHUB_OUTPUT
+          else
+            echo "token=${{ secrets.GH_TOKEN }}" >> $GITHUB_OUTPUT
+          fi
+
+      # -------------------------
+      # OPTIONAL CHECKOUT
+      # -------------------------
       - name: Checkout lint rules
+        continue-on-error: true
         uses: actions/checkout@v4
         with:
           repository: ForgeCrux/apigee-linting-custom
           ref: develop
           path: apigee-linting-custom
-          token: ${{ steps.app-token.outputs.token || secrets.GH_TOKEN }}
+          token: ${{ steps.token-select.outputs.token }}
 
+      # -------------------------
+      # OPTIONAL LINT
+      # -------------------------
       - name: Apigee Lint
         continue-on-error: true
         run: |
-          npx apigeelint -s apiproxy -x ./apigee-linting-custom/rules -f table.js || true
+          if [ -d "./apigee-linting-custom" ]; then
+            npx apigeelint -s apiproxy -x ./apigee-linting-custom/rules -f table.js || true
+          else
+            echo "Skipping lint (rules repo not available)"
+          fi
 
       - name: JS Lint
         continue-on-error: true
@@ -98,11 +122,17 @@ jobs:
             -Dsonar.projectKey=${{ github.event.repository.name }} \
             -Dsonar.sources=apiproxy || true
 
+      # -------------------------
+      # PACKAGE
+      # -------------------------
       - name: Package Proxy
         run: |
           test -d apiproxy
           zip -r proxy.zip apiproxy
 
+      # -------------------------
+      # GCP AUTH
+      # -------------------------
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
@@ -120,6 +150,9 @@ jobs:
           ACCESS_TOKEN=$(gcloud auth print-access-token)
           echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
 
+      # -------------------------
+      # IMPORT
+      # -------------------------
       - name: Import Proxy
         run: |
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
@@ -133,6 +166,9 @@ jobs:
             exit 1
           fi
 
+      # -------------------------
+      # GET REVISION
+      # -------------------------
       - name: Get Latest Revision
         id: revision
         run: |
@@ -142,6 +178,9 @@ jobs:
 
           echo "revision=$REV" >> $GITHUB_OUTPUT
 
+      # -------------------------
+      # DEPLOY
+      # -------------------------
       - name: Deploy Proxy
         run: |
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
@@ -156,6 +195,9 @@ jobs:
             exit 1
           fi
 
+      # -------------------------
+      # VERIFY
+      # -------------------------
       - name: Verify Deployment
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
