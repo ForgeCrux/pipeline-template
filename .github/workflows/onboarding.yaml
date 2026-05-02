@@ -1,12 +1,6 @@
 name: Onboarding Pipeline
 
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened]
-  push:
-    branches:
-      - main
-      
   workflow_dispatch:
     inputs:
       repo_name:
@@ -21,24 +15,35 @@ env:
 jobs:
   bootstrap-repo:
     runs-on: ubuntu-latest
-     
+
     steps:
       - name: 🧾 Set variables
         run: |
           echo "REPO_NAME=${{ inputs.repo_name }}" >> $GITHUB_ENV
           echo "WORKDIR=/tmp/${{ inputs.repo_name }}" >> $GITHUB_ENV
 
-      # 🔥 FORCE PUBLIC REPO (ONLY correct approach)
-      - name: 🚀 Create repository (ALWAYS PUBLIC)
+      - name: 🚀 Create repository (FORCE PUBLIC)
         run: |
-          curl -s -X POST "https://api.github.com/orgs/${ORG_NAME}/repos" \
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
+            "https://api.github.com/orgs/${ORG_NAME}/repos" \
             -H "Authorization: token ${{ secrets.ORG_GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             -d "{
               \"name\": \"${REPO_NAME}\",
               \"private\": false,
-              \"auto_init\": true
-            }"
+              \"visibility\": \"public\",
+              \"auto_init\": true,
+              \"has_issues\": true
+            }")
+
+          echo "$RESPONSE"
+
+          STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
+
+          if [ "$STATUS" -ne 201 ]; then
+            echo "❌ Repo creation failed"
+            exit 1
+          fi
 
       - name: 📥 Clone repository
         run: |
