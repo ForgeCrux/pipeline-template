@@ -29,6 +29,10 @@ on:
         required: true
       GH_TOKEN:
         required: true
+      APP_ID:
+        required: true
+      APP_PRIVATE_KEY:
+        required: true
 permissions:
   contents: read
   id-token: write   # REQUIRED for Workload Identity
