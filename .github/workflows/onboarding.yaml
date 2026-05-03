@@ -23,7 +23,7 @@ jobs:
           echo "WORKDIR=/tmp/${{ inputs.repo_name }}" >> $GITHUB_ENV
 
       # -------------------------
-      # CREATE REPO (PUBLIC)
+      # CREATE REPO
       # -------------------------
       - name: 🚀 Create repository
         run: |
@@ -36,11 +36,15 @@ jobs:
               \"auto_init\": true
             }"
 
-      # -------------------------
-      # WAIT FOR REPO
-      # -------------------------
-      - name: ⏳ Wait for repo to be ready
+      - name: ⏳ Wait for repo
         run: sleep 5
+
+      # -------------------------
+      # INSTALL PYTHON + LIB
+      # -------------------------
+      - name: Install encryption dependencies
+        run: |
+          pip3 install pynacl
 
       # -------------------------
       # GET PUBLIC KEY
@@ -54,67 +58,68 @@ jobs:
 
           echo "$RESPONSE"
 
-          KEY_ID=$(echo "$RESPONSE" | jq -r .key_id)
-          KEY=$(echo "$RESPONSE" | jq -r .key)
-
-          echo "key_id=$KEY_ID" >> $GITHUB_OUTPUT
-          echo "key=$KEY" >> $GITHUB_OUTPUT
-
-      # -------------------------
-      # INSTALL ENCRYPT TOOL
-      # -------------------------
-      - name: Install libsodium
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsodium-dev
+          echo "key_id=$(echo $RESPONSE | jq -r .key_id)" >> $GITHUB_OUTPUT
+          echo "key=$(echo $RESPONSE | jq -r .key)" >> $GITHUB_OUTPUT
 
       # -------------------------
       # ENCRYPT SECRET
       # -------------------------
-      - name: 🔑 Encrypt GCP_SA_KEY
+      - name: 🔑 Encrypt secret
         id: encrypt
         run: |
           python3 - <<EOF
 import base64
-import nacl.encoding
-import nacl.public
-import os
+from nacl import public
 
 public_key = "${{ steps.get_key.outputs.key }}"
-secret_value = """${{ secrets.GCP_SA_KEY }}"""
+secret = """${{ secrets.GCP_SA_KEY }}"""
 
-public_key_bytes = base64.b64decode(public_key)
-sealed_box = nacl.public.SealedBox(nacl.public.PublicKey(public_key_bytes))
-encrypted = sealed_box.encrypt(secret_value.encode("utf-8"))
+pk = public.PublicKey(base64.b64decode(public_key))
+sealed_box = public.SealedBox(pk)
+encrypted = sealed_box.encrypt(secret.encode())
 
 print("encrypted_value=" + base64.b64encode(encrypted).decode())
 EOF >> $GITHUB_OUTPUT
 
       # -------------------------
-      # CREATE SECRET
+      # CREATE SECRET (WITH DEBUG)
       # -------------------------
-      - name: 🔒 Add GCP_SA_KEY to new repo
+      - name: 🔒 Create secret
         run: |
-          curl -X PUT \
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X PUT \
             -H "Authorization: token ${{ secrets.ORG_GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${ORG_NAME}/${REPO_NAME}/actions/secrets/GCP_SA_KEY \
             -d "{
               \"encrypted_value\": \"${{ steps.encrypt.outputs.encrypted_value }}\",
               \"key_id\": \"${{ steps.get_key.outputs.key_id }}\"
-            }"
+            }")
+
+          echo "$RESPONSE"
+
+          STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
+
+          if [ "$STATUS" -ne 201 ] && [ "$STATUS" -ne 204 ]; then
+            echo "❌ Failed to create secret"
+            exit 1
+          fi
 
       # -------------------------
-      # CLONE REPO
+      # VERIFY SECRET EXISTS
+      # -------------------------
+      - name: 🔍 Verify secret
+        run: |
+          curl -H "Authorization: token ${{ secrets.ORG_GITHUB_TOKEN }}" \
+          https://api.github.com/repos/${ORG_NAME}/${REPO_NAME}/actions/secrets
+
+      # -------------------------
+      # CLONE + ADD CODE
       # -------------------------
       - name: 📥 Clone repository
         run: |
           rm -rf "$WORKDIR"
           git clone https://x-access-token:${{ secrets.ORG_GITHUB_TOKEN }}@github.com/${ORG_NAME}/${REPO_NAME}.git "$WORKDIR"
 
-      # -------------------------
-      # ADD CODE
-      # -------------------------
       - name: ⬇️ Download ZIP
         run: |
           cd "$WORKDIR"
@@ -126,9 +131,6 @@ EOF >> $GITHUB_OUTPUT
           unzip "$ZIP_FILE"
           rm -f "$ZIP_FILE"
 
-      # -------------------------
-      # PUSH CODE
-      # -------------------------
       - name: 📤 Commit and push
         run: |
           cd "$WORKDIR"
