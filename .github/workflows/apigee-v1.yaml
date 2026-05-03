@@ -32,8 +32,6 @@ on:
         required: true
       APP_PRIVATE_KEY:
         required: true
-      GCP_SA_KEY:
-        required: true
 
 permissions:
   contents: read
