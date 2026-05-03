@@ -6,6 +6,8 @@ on:
       repo_name:
         description: "New repository name"
         required: true
+      resourcetype:
+        required: true
 
 env:
   ORG_NAME: ForgeCrux
