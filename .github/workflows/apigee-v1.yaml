@@ -16,6 +16,9 @@ on:
       deploy_proxy:
         required: true
         type: string
+      resourcetype:
+        required: true
+        type: string
       node_version:
         required: false
         default: '18'
@@ -57,6 +60,14 @@ jobs:
       - name: Force GitHub auth
         run: |
           git config --global url."https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+      - name: Validate Resource Type
+        run: |
+          if [[ "${{ inputs.resourcetype }}" != "apis" && "${{ inputs.resourcetype }}" != "sharedflows" ]]; then
+            echo "Invalid resourcetype: ${{ inputs.resourcetype }}"
+            echo "Allowed values: apis | sharedflows"
+            exit 1
+          fi
 
       # -------------------------
       # OPTIONAL GITHUB APP TOKEN
@@ -156,7 +167,7 @@ jobs:
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
             -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
             -F file=@proxy.zip \
-            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis?action=import&name=${{ inputs.deploy_proxy }}")
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/${{ inputs.resourcetype }}?action=import&name=${{ inputs.deploy_proxy }}")
 
           STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
           if [ "$STATUS" -ne 200 ]; then
@@ -171,7 +182,7 @@ jobs:
         id: revision
         run: |
           REV=$(curl -s -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
-          "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}/revisions" \
+          "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}/revisions" \
           | jq -r 'map(tonumber) | max')
 
           echo "revision=$REV" >> $GITHUB_OUTPUT
@@ -185,7 +196,7 @@ jobs:
             -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
             -H "Content-Type: application/json" \
             --data '{ "override": true }' \
-            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/apis/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments")
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments")
 
           STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
           if [ "$STATUS" -ne 200 ]; then
@@ -200,7 +211,7 @@ jobs:
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
-              "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}")
+              "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}")
 
           if [ "$STATUS" != "200" ]; then
             echo "Proxy does not exist"
