@@ -1,24 +1,11 @@
 name: Onboarding Pipeline
 
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened]
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       repo_name:
         description: "New repository name"
         required: true
-      visibility:
-        description: "Repository visibility"
-        required: true
-        default: "private"
-        type: choice
-        options:
-          - private
-          - public
 
 env:
   ORG_NAME: ForgeCrux
@@ -35,6 +22,9 @@ jobs:
           echo "REPO_NAME=${{ inputs.repo_name }}" >> $GITHUB_ENV
           echo "WORKDIR=/tmp/${{ inputs.repo_name }}" >> $GITHUB_ENV
 
+      # -------------------------
+      # CREATE REPO (PUBLIC)
+      # -------------------------
       - name: 🚀 Create repository
         run: |
           curl -s -X POST "https://api.github.com/orgs/${ORG_NAME}/repos" \
@@ -42,15 +32,89 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -d "{
               \"name\": \"${REPO_NAME}\",
-              \"visibility\": \"${{ inputs.visibility }}\",
+              \"private\": false,
               \"auto_init\": true
             }"
 
+      # -------------------------
+      # WAIT FOR REPO
+      # -------------------------
+      - name: ⏳ Wait for repo to be ready
+        run: sleep 5
+
+      # -------------------------
+      # GET PUBLIC KEY
+      # -------------------------
+      - name: 🔐 Get repo public key
+        id: get_key
+        run: |
+          RESPONSE=$(curl -s \
+            -H "Authorization: token ${{ secrets.ORG_GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${ORG_NAME}/${REPO_NAME}/actions/secrets/public-key)
+
+          echo "$RESPONSE"
+
+          KEY_ID=$(echo "$RESPONSE" | jq -r .key_id)
+          KEY=$(echo "$RESPONSE" | jq -r .key)
+
+          echo "key_id=$KEY_ID" >> $GITHUB_OUTPUT
+          echo "key=$KEY" >> $GITHUB_OUTPUT
+
+      # -------------------------
+      # INSTALL ENCRYPT TOOL
+      # -------------------------
+      - name: Install libsodium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsodium-dev
+
+      # -------------------------
+      # ENCRYPT SECRET
+      # -------------------------
+      - name: 🔑 Encrypt GCP_SA_KEY
+        id: encrypt
+        run: |
+          python3 - <<EOF
+import base64
+import nacl.encoding
+import nacl.public
+import os
+
+public_key = "${{ steps.get_key.outputs.key }}"
+secret_value = """${{ secrets.GCP_SA_KEY }}"""
+
+public_key_bytes = base64.b64decode(public_key)
+sealed_box = nacl.public.SealedBox(nacl.public.PublicKey(public_key_bytes))
+encrypted = sealed_box.encrypt(secret_value.encode("utf-8"))
+
+print("encrypted_value=" + base64.b64encode(encrypted).decode())
+EOF >> $GITHUB_OUTPUT
+
+      # -------------------------
+      # CREATE SECRET
+      # -------------------------
+      - name: 🔒 Add GCP_SA_KEY to new repo
+        run: |
+          curl -X PUT \
+            -H "Authorization: token ${{ secrets.ORG_GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${ORG_NAME}/${REPO_NAME}/actions/secrets/GCP_SA_KEY \
+            -d "{
+              \"encrypted_value\": \"${{ steps.encrypt.outputs.encrypted_value }}\",
+              \"key_id\": \"${{ steps.get_key.outputs.key_id }}\"
+            }"
+
+      # -------------------------
+      # CLONE REPO
+      # -------------------------
       - name: 📥 Clone repository
         run: |
           rm -rf "$WORKDIR"
           git clone https://x-access-token:${{ secrets.ORG_GITHUB_TOKEN }}@github.com/${ORG_NAME}/${REPO_NAME}.git "$WORKDIR"
 
+      # -------------------------
+      # ADD CODE
+      # -------------------------
       - name: ⬇️ Download ZIP
         run: |
           cd "$WORKDIR"
@@ -62,6 +126,9 @@ jobs:
           unzip "$ZIP_FILE"
           rm -f "$ZIP_FILE"
 
+      # -------------------------
+      # PUSH CODE
+      # -------------------------
       - name: 📤 Commit and push
         run: |
           cd "$WORKDIR"
