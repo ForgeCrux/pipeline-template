@@ -59,11 +59,13 @@ jobs:
         run: |
           git config --global url."https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
+      # -------------------------
+      # VALIDATE INPUT
+      # -------------------------
       - name: Validate Resource Type
         run: |
           if [[ "${{ inputs.resourcetype }}" != "apis" && "${{ inputs.resourcetype }}" != "sharedflows" ]]; then
             echo "Invalid resourcetype: ${{ inputs.resourcetype }}"
-            echo "Allowed values: apis | sharedflows"
             exit 1
           fi
 
@@ -78,9 +80,6 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      # -------------------------
-      # SAFE TOKEN FALLBACK
-      # -------------------------
       - name: Select Token
         id: token-select
         run: |
@@ -91,7 +90,7 @@ jobs:
           fi
 
       # -------------------------
-      # OPTIONAL CHECKOUT
+      # OPTIONAL LINT
       # -------------------------
       - name: Checkout lint rules
         continue-on-error: true
@@ -102,16 +101,13 @@ jobs:
           path: apigee-linting-custom
           token: ${{ steps.token-select.outputs.token }}
 
-      # -------------------------
-      # OPTIONAL LINT
-      # -------------------------
       - name: Apigee Lint
         continue-on-error: true
         run: |
           if [ -d "./apigee-linting-custom" ]; then
             npx apigeelint -s apiproxy -x ./apigee-linting-custom/rules -f table.js || true
           else
-            echo "Skipping lint (rules repo not available)"
+            echo "Skipping lint"
           fi
 
       - name: JS Lint
@@ -138,23 +134,28 @@ jobs:
           zip -r proxy.zip apiproxy
 
       # -------------------------
-      # GCP AUTH
+      # TOKEN SERVICE AUTH
       # -------------------------
-      - name: Setup gcloud
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Create Service Account File
-        run: |
-          printf '%s' '${{ secrets.GCP_SA_KEY }}' > key.json
-
-      - name: Authenticate to GCP
-        run: |
-          gcloud auth activate-service-account --key-file=key.json
-
       - name: Get Access Token
         id: token
         run: |
-          ACCESS_TOKEN=$(gcloud auth print-access-token)
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" \
+            https://token-service-113875395623.us-central1.run.app/token)
+
+          STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
+
+          if [ "$STATUS" -ne 200 ]; then
+            echo "Failed to fetch token"
+            exit 1
+          fi
+
+          ACCESS_TOKEN=$(echo "$RESPONSE" | head -n 1 | jq -r '.access_token')
+
+          if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" == "null" ]; then
+            echo "Invalid token"
+            exit 1
+          fi
+
           echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
 
       # -------------------------
@@ -217,7 +218,3 @@ jobs:
           fi
 
           echo "Deployment successful"
-
-      - name: Cleanup
-        if: always()
-        run: rm -f key.json
