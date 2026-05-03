@@ -16,6 +16,8 @@ on:
         required: true
       run_key:
         required: true
+      revision:
+        required: false
 
 jobs:
   deploy:
@@ -95,30 +97,43 @@ jobs:
         run: unzip -l proxy.zip
 
       # Import Proxy
-      - name: Import Proxy
+      - name: Import Proxy (Only for DEV)
+        if: ${{ inputs.apigee_env == 'dev' }}
         run: |
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
             -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
             -F file=@proxy.zip \
             "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis?action=import&name=${{ inputs.deploy_proxy }}")
-
+      
           echo "$RESPONSE"
-
+      
           STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
           if [ "$STATUS" -ne 200 ]; then
             echo "Import failed"
             exit 1
           fi
 
-      # Get latest revision
-      - name: Get Revision
+      - name: Resolve Revision
         id: revision
         run: |
-          REV=$(curl -s -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
-          "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}/revisions" \
-          | jq -r 'map(tonumber) | max')
-
-          echo "revision=$REV"
+          if [ -n "${{ inputs.revision }}" ]; then
+            echo "Using provided revision: ${{ inputs.revision }}"
+            REV=${{ inputs.revision }}
+          else
+            echo "No revision provided. Fetching latest..."
+      
+            REV=$(curl -s -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}/revisions" \
+            | jq -r 'map(tonumber) | max')
+      
+            if [ -z "$REV" ] || [ "$REV" == "null" ]; then
+              echo "No revision found"
+              exit 1
+            fi
+      
+            echo "Latest revision: $REV"
+          fi
+      
           echo "revision=$REV" >> $GITHUB_OUTPUT
 
       # Deploy proxy
