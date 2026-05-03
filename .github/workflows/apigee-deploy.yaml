@@ -13,11 +13,13 @@ on:
       deploy_proxy:
         required: true
       zip_url:
-        required: true
+        required: false
       run_key:
         required: true
       revision:
         required: false
+      resourcetype:
+        required: true
 
 jobs:
   deploy:
@@ -46,6 +48,26 @@ jobs:
         run: |
           echo '${{ secrets.GCP_SA_KEY }}' > key.json
 
+      - name: Validate Resource Type
+        run: |
+          if [[ "${{ inputs.resourcetype }}" != "apis" && "${{ inputs.resourcetype }}" != "sharedflows" ]]; then
+            echo "Invalid resourcetype: ${{ inputs.resourcetype }}"
+            echo "Allowed: apis | sharedflows"
+            exit 1
+          fi
+
+      - name: Validate Inputs
+        run: |
+          if [[ -n "${{ inputs.zip_url }}" && -n "${{ inputs.revision }}" ]]; then
+            echo "Provide either zip_url OR revision, not both"
+            exit 1
+          fi
+      
+          if [[ -z "${{ inputs.zip_url }}" && -z "${{ inputs.revision }}" ]]; then
+            echo "You must provide either zip_url or revision"
+            exit 1
+          fi
+
       # Authenticate
       - name: Authenticate to GCP
         run: |
@@ -61,11 +83,13 @@ jobs:
 
       # Download proxy
       - name: Download Proxy
+        if: ${{ inputs.zip_url != '' }}
         run: |
           curl -L -o proxy.zip "${{ inputs.zip_url }}"
 
       # Extract ZIP
       - name: Extract Proxy
+        if: ${{ inputs.zip_url != '' }}
         run: |
           unzip proxy.zip -d extracted
           echo "Extracted structure:"
@@ -74,6 +98,7 @@ jobs:
       # Locate apiproxy folder
       - name: Locate apiproxy
         id: locate
+        if: ${{ inputs.zip_url != '' }}
         run: |
           PROXY_DIR=$(find extracted -type d -name apiproxy | head -n 1)
 
@@ -87,6 +112,7 @@ jobs:
 
       # Repackage correctly
       - name: Package Proxy
+        if: ${{ inputs.zip_url != '' }}
         run: |
           cd $(dirname "${{ steps.locate.outputs.proxy_dir }}")
           zip -r proxy.zip apiproxy
@@ -94,16 +120,17 @@ jobs:
 
       # Debug ZIP
       - name: Debug ZIP
+        if: ${{ inputs.zip_url != '' }}
         run: unzip -l proxy.zip
 
       # Import Proxy
-      - name: Import Proxy (Only for DEV)
-        if: ${{ inputs.apigee_env == 'dev' }}
+      - name: Import Proxy
+        if: ${{ inputs.zip_url != '' }}
         run: |
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
             -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
             -F file=@proxy.zip \
-            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis?action=import&name=${{ inputs.deploy_proxy }}")
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/${{ inputs.resourcetype }}?action=import&name=${{ inputs.deploy_proxy }}")
       
           echo "$RESPONSE"
       
@@ -119,15 +146,16 @@ jobs:
           if [ -n "${{ inputs.revision }}" ]; then
             echo "Using provided revision: ${{ inputs.revision }}"
             REV=${{ inputs.revision }}
-          else
-            echo "No revision provided. Fetching latest..."
+      
+          elif [ -n "${{ inputs.zip_url }}" ]; then
+            echo "ZIP provided → fetching latest imported revision"
       
             REV=$(curl -s -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
-            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}/revisions" \
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}/revisions" \
             | jq -r 'map(tonumber) | max')
       
             if [ -z "$REV" ] || [ "$REV" == "null" ]; then
-              echo "No revision found"
+              echo "No revision found after import"
               exit 1
             fi
       
@@ -136,6 +164,18 @@ jobs:
       
           echo "revision=$REV" >> $GITHUB_OUTPUT
 
+      - name: Validate Revision Exists
+        if: ${{ inputs.revision != '' }}
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}/revisions/${{ inputs.revision }}")
+      
+          if [ "$STATUS" != "200" ]; then
+            echo "Revision does not exist"
+            exit 1
+          fi
+
       # Deploy proxy
       - name: Deploy Proxy
         run: |
@@ -143,7 +183,7 @@ jobs:
             -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
             -H "Content-Type: application/json" \
             --data '{ "override": true }' \
-            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/apis/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments")
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments")
 
           echo "$RESPONSE"
 
@@ -158,7 +198,7 @@ jobs:
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
-            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/apis/${{ inputs.deploy_proxy }}")
+            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}")
 
           if [ "$STATUS" != "200" ]; then
             echo "Proxy not found"
