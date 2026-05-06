@@ -33,6 +33,9 @@ jobs:
           echo "Run URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           echo "RUN_KEY: ${{ inputs.run_key }}"
 
+      - name: Start group: Setup
+        run: echo "::group::Setup"
+
       # Install dependencies
       - name: Install tools
         run: |
@@ -47,6 +50,13 @@ jobs:
       - name: Create Service Account File
         run: |
           echo '${{ secrets.GCP_SA_KEY }}' > key.json
+
+      - name: End group: Setup
+        if: always()
+        run: echo "::endgroup::"
+
+      - name: Start group: Validation
+        run: echo "::group::Validation"
 
       - name: Validate Resource Type
         run: |
@@ -68,7 +78,14 @@ jobs:
             exit 1
           fi
 
+      - name: End group: Validation
+        if: always()
+        run: echo "::endgroup::"
+
       # Authenticate
+      - name: Start group: Authentication
+        run: echo "::group::Authentication"
+
       - name: Authenticate to GCP
         run: |
           gcloud auth activate-service-account \
@@ -80,6 +97,14 @@ jobs:
         run: |
           ACCESS_TOKEN=$(gcloud auth print-access-token)
           echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
+
+      - name: End group: Authentication
+        if: always()
+        run: echo "::endgroup::"
+
+      - name: Start group: Proxy handling
+        if: ${{ inputs.zip_url != '' }}
+        run: echo "::group::Proxy handling"
 
       # Download proxy
       - name: Download Proxy
@@ -139,6 +164,13 @@ jobs:
             echo "Import failed"
             exit 1
           fi
+
+      - name: End group: Proxy handling
+        if: always()
+        run: echo "::endgroup::"
+
+      - name: Start group: Deployment
+        run: echo "::group::Deployment"
 
       - name: Resolve Revision
         id: revision
@@ -206,6 +238,10 @@ jobs:
           fi
 
           echo "Deployment successful"
+
+      - name: End group: Deployment
+        if: always()
+        run: echo "::endgroup::"
 
       # Cleanup (security best practice)
       - name: Cleanup
