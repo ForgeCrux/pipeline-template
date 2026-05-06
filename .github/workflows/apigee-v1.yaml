@@ -42,6 +42,9 @@ jobs:
     timeout-minutes: 30
 
     steps:
+      - name: Start group: Setup
+        run: echo "::group::Setup"
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -59,9 +62,16 @@ jobs:
         run: |
           git config --global url."https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
+      - name: End group: Setup
+        if: always()
+        run: echo "::endgroup::"
+
       # -------------------------
       # VALIDATE INPUT
       # -------------------------
+      - name: Start group: Validation
+        run: echo "::group::Validation"
+
       - name: Validate Resource Type
         run: |
           if [[ "${{ inputs.resourcetype }}" != "apis" && "${{ inputs.resourcetype }}" != "sharedflows" ]]; then
@@ -89,9 +99,16 @@ jobs:
             echo "token=${{ secrets.GH_TOKEN }}" >> $GITHUB_OUTPUT
           fi
 
+      - name: End group: Validation
+        if: always()
+        run: echo "::endgroup::"
+
       # -------------------------
       # OPTIONAL LINT
       # -------------------------
+      - name: Start group: Lint
+        run: echo "::group::Lint"
+
       - name: Checkout lint rules
         continue-on-error: true
         uses: actions/checkout@v4
@@ -125,17 +142,31 @@ jobs:
             -Dsonar.projectKey=${{ github.event.repository.name }} \
             -Dsonar.sources=apiproxy || true
 
+      - name: End group: Lint
+        if: always()
+        run: echo "::endgroup::"
+
       # -------------------------
       # PACKAGE
       # -------------------------
+      - name: Start group: Package
+        run: echo "::group::Package"
+
       - name: Package Proxy
         run: |
           test -d apiproxy
           zip -r proxy.zip apiproxy
 
+      - name: End group: Package
+        if: always()
+        run: echo "::endgroup::"
+
       # -------------------------
       # TOKEN SERVICE AUTH
       # -------------------------
+      - name: Start group: Token auth
+        run: echo "::group::Token auth"
+
       - name: Get Access Token
         id: token
         run: |
@@ -158,9 +189,16 @@ jobs:
 
           echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
 
+      - name: End group: Token auth
+        if: always()
+        run: echo "::endgroup::"
+
       # -------------------------
       # IMPORT
       # -------------------------
+      - name: Start group: Import
+        run: echo "::group::Import"
+
       - name: Import Proxy
         run: |
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
@@ -174,9 +212,16 @@ jobs:
             exit 1
           fi
 
+      - name: End group: Import
+        if: always()
+        run: echo "::endgroup::"
+
       # -------------------------
       # GET REVISION
       # -------------------------
+      - name: Start group: Revision
+        run: echo "::group::Revision"
+
       - name: Get Latest Revision
         id: revision
         run: |
@@ -186,9 +231,16 @@ jobs:
 
           echo "revision=$REV" >> $GITHUB_OUTPUT
 
+      - name: End group: Revision
+        if: always()
+        run: echo "::endgroup::"
+
       # -------------------------
       # DEPLOY
       # -------------------------
+      - name: Start group: Deployment
+        run: echo "::group::Deployment"
+
       - name: Deploy Proxy
         run: |
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
@@ -203,9 +255,16 @@ jobs:
             exit 1
           fi
 
+      - name: End group: Deployment
+        if: always()
+        run: echo "::endgroup::"
+
       # -------------------------
       # VERIFY
       # -------------------------
+      - name: Start group: Verify
+        run: echo "::group::Verify"
+
       - name: Verify Deployment
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -218,3 +277,7 @@ jobs:
           fi
 
           echo "Deployment successful"
+
+      - name: End group: Verify
+        if: always()
+        run: echo "::endgroup::"
