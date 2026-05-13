@@ -203,17 +203,69 @@ jobs:
         run: echo "::group::Import"
 
       - name: Import Proxy
+        shell: bash
         run: |
+          if [ "${{ inputs.resourcetype }}" = "apis" ]; then
+            ZIP_FILE="proxy.zip"
+          else
+            ZIP_FILE="sharedflowbundle.zip"
+          fi
+      
+          URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/${{ inputs.resourcetype }}?action=import&name=${{ inputs.deploy_proxy }}"
+      
+          TOKEN="${{ steps.token.outputs.access_token }}"
+      
+          echo "================ REQUEST DEBUG ================"
+          echo "URL:"
+          echo "$URL"
+          echo ""
+      
+          echo "RESOURCE TYPE:"
+          echo "${{ inputs.resourcetype }}"
+          echo ""
+      
+          echo "ORG:"
+          echo "${{ inputs.apigee_org }}"
+          echo ""
+      
+          echo "DEPLOY NAME:"
+          echo "${{ inputs.deploy_proxy }}"
+          echo ""
+      
+          echo "ZIP FILE:"
+          echo "$ZIP_FILE"
+          echo ""
+      
+          echo "ZIP CONTENTS:"
+          unzip -l "$ZIP_FILE" || true
+          echo ""
+      
+          echo "TOKEN PREVIEW:"
+          echo "${TOKEN:0:25}..."
+          echo "================================================"
+          echo ""
+      
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
-            -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
-            -F file=@proxy.zip \
-            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/${{ inputs.resourcetype }}?action=import&name=${{ inputs.deploy_proxy }}")
-
+            -H "Authorization: Bearer $TOKEN" \
+            -F file=@"$ZIP_FILE" \
+            "$URL")
+      
+          echo ""
+          echo "================ FULL RESPONSE ================="
+          echo "$RESPONSE"
+          echo "================================================"
+          echo ""
+      
           STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
+      
+          echo "PARSED STATUS: $STATUS"
+      
           if [ "$STATUS" -ne 200 ]; then
             echo "Import failed"
             exit 1
           fi
+      
+          echo "Import successful"
 
       - name: "End group: Import"
         if: always()
