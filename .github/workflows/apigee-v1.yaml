@@ -241,18 +241,70 @@ jobs:
         run: echo "::group::Deployment"
 
       - name: Deploy Proxy
+        shell: bash
         run: |
+          URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments"
+      
+          TOKEN="${{ steps.token.outputs.access_token }}"
+      
+          BODY='{ "override": true }'
+      
+          echo "================ REQUEST DEBUG ================"
+          echo "URL:"
+          echo "$URL"
+          echo ""
+      
+          echo "RESOURCE TYPE:"
+          echo "${{ inputs.resourcetype }}"
+          echo ""
+      
+          echo "ORG:"
+          echo "${{ inputs.apigee_org }}"
+          echo ""
+      
+          echo "ENV:"
+          echo "${{ inputs.apigee_env }}"
+          echo ""
+      
+          echo "PROXY:"
+          echo "${{ inputs.deploy_proxy }}"
+          echo ""
+      
+          echo "REVISION:"
+          echo "${{ steps.revision.outputs.revision }}"
+          echo ""
+      
+          echo "REQUEST BODY:"
+          echo "$BODY"
+          echo ""
+      
+          echo "TOKEN PREVIEW:"
+          echo "${TOKEN:0:25}..."
+          echo "================================================"
+          echo ""
+      
           RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST \
-            -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
+            -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
-            --data '{ "override": true }' \
-            "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments")
-
+            --data "$BODY" \
+            "$URL")
+      
+          echo ""
+          echo "================ FULL RESPONSE ================="
+          echo "$RESPONSE"
+          echo "================================================"
+          echo ""
+      
           STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
+      
+          echo "PARSED STATUS: $STATUS"
+      
           if [ "$STATUS" -ne 200 ]; then
             echo "Deployment failed"
             exit 1
           fi
+      
+          echo "Deployment successful"
 
       - name: "End group: Deployment"
         if: always()
