@@ -62,14 +62,14 @@ jobs:
         run: |
           git config --global url."https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
-      - name: End group: Setup
+      - name: "End group: Setup"
         if: always()
         run: echo "::endgroup::"
 
       # -------------------------
       # VALIDATE INPUT
       # -------------------------
-      - name: Start group: Validation
+      - name: "Start group: Validation"
         run: echo "::group::Validation"
 
       - name: Validate Resource Type
@@ -92,21 +92,20 @@ jobs:
 
       - name: Select Token
         id: token-select
+        shell: bash
         run: |
-          if [ -n "${{ steps.app-token.outputs.token }}" ]; then
-            echo "token=${{ steps.app-token.outputs.token }}" >> $GITHUB_OUTPUT
+          TOKEN="${{ steps.app-token.outputs.token }}"
+      
+          if [ -n "$TOKEN" ]; then
+            echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
           else
-            echo "token=${{ secrets.GH_TOKEN }}" >> $GITHUB_OUTPUT
+            echo "token=${{ secrets.GH_TOKEN }}" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: End group: Validation
-        if: always()
-        run: echo "::endgroup::"
 
       # -------------------------
       # OPTIONAL LINT
       # -------------------------
-      - name: Start group: Lint
+      - name: "Start group: Lint"
         run: echo "::group::Lint"
 
       - name: Checkout lint rules
@@ -142,14 +141,14 @@ jobs:
             -Dsonar.projectKey=${{ github.event.repository.name }} \
             -Dsonar.sources=apiproxy || true
 
-      - name: End group: Lint
+      - name: "End group: Lint"
         if: always()
         run: echo "::endgroup::"
 
       # -------------------------
       # PACKAGE
       # -------------------------
-      - name: Start group: Package
+      - name: "Start group: Package"
         run: echo "::group::Package"
 
       - name: Package Proxy
@@ -164,7 +163,7 @@ jobs:
       # -------------------------
       # TOKEN SERVICE AUTH
       # -------------------------
-      - name: Start group: Token auth
+      - name: "Start group: Token auth"
         run: echo "::group::Token auth"
 
       - name: Get Access Token
@@ -189,7 +188,7 @@ jobs:
 
           echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
 
-      - name: End group: Token auth
+      - name: "End group: Token auth"
         if: always()
         run: echo "::endgroup::"
 
@@ -212,14 +211,14 @@ jobs:
             exit 1
           fi
 
-      - name: End group: Import
+      - name: "End group: Import"
         if: always()
         run: echo "::endgroup::"
 
       # -------------------------
       # GET REVISION
       # -------------------------
-      - name: Start group: Revision
+      - name: "Start group: Revision"
         run: echo "::group::Revision"
 
       - name: Get Latest Revision
@@ -231,14 +230,14 @@ jobs:
 
           echo "revision=$REV" >> $GITHUB_OUTPUT
 
-      - name: End group: Revision
+      - name: "End group: Revision"
         if: always()
         run: echo "::endgroup::"
 
       # -------------------------
       # DEPLOY
       # -------------------------
-      - name: Start group: Deployment
+      - name: "Start group: Deployment"
         run: echo "::group::Deployment"
 
       - name: Deploy Proxy
@@ -255,14 +254,14 @@ jobs:
             exit 1
           fi
 
-      - name: End group: Deployment
+      - name: "End group: Deployment"
         if: always()
         run: echo "::endgroup::"
 
       # -------------------------
       # VERIFY
       # -------------------------
-      - name: Start group: Verify
+      - name: "Start group: Verify"
         run: echo "::group::Verify"
 
       - name: Verify Deployment
@@ -278,6 +277,6 @@ jobs:
 
           echo "Deployment successful"
 
-      - name: End group: Verify
+      - name: "End group: Verify"
         if: always()
         run: echo "::endgroup::"
