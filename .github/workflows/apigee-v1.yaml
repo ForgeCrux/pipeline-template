@@ -36,6 +36,10 @@ on:
 permissions:
   contents: read
 
+env:
+  RESOURCE_TYPE: ${{ inputs.resourcetype }}
+  BUNDLE_DIR: ${{ inputs.resourcetype == 'apis' && 'apiproxy' || 'sharedflowbundle' }}
+
 jobs:
   build-lint-deploy:
     runs-on: ubuntu-latest
@@ -121,7 +125,7 @@ jobs:
         continue-on-error: true
         run: |
           if [ -d "./apigee-linting-custom" ]; then
-            npx apigeelint -s apiproxy -x ./apigee-linting-custom/rules -f table.js || true
+            npx apigeelint -s "$BUNDLE_DIR" -x ./apigee-linting-custom/rules -f table.js || true
           else
             echo "Skipping lint"
           fi
@@ -129,7 +133,7 @@ jobs:
       - name: JS Lint
         continue-on-error: true
         run: |
-          npx jslint apiproxy/**/*.js || true
+          npx jslint "$BUNDLE_DIR"/**/*.js || true
 
       - name: Sonar Scan
         continue-on-error: true
@@ -139,7 +143,7 @@ jobs:
           npx sonarqube-scanner \
             -Dsonar.organization=forgecrux \
             -Dsonar.projectKey=${{ github.event.repository.name }} \
-            -Dsonar.sources=apiproxy || true
+            -Dsonar.sources="$BUNDLE_DIR" || true
 
       - name: "End group: Lint"
         if: always()
@@ -153,8 +157,8 @@ jobs:
 
       - name: Package Proxy
         run: |
-          test -d apiproxy
-          zip -r proxy.zip apiproxy
+          test -d "$BUNDLE_DIR"
+          zip -r proxy.zip "$BUNDLE_DIR"
 
       - name: "End group: Package"
         if: always()
