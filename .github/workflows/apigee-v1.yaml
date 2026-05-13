@@ -156,7 +156,7 @@ jobs:
           test -d apiproxy
           zip -r proxy.zip apiproxy
 
-      - name: End group: Package
+      - name: "End group: Package"
         if: always()
         run: echo "::endgroup::"
 
@@ -195,7 +195,7 @@ jobs:
       # -------------------------
       # IMPORT
       # -------------------------
-      - name: Start group: Import
+      - name: "Start group: Import"
         run: echo "::group::Import"
 
       - name: Import Proxy
