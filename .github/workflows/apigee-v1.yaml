@@ -156,13 +156,25 @@ jobs:
         run: echo "::group::Package"
 
       - name: Package Proxy
+        shell: bash
         run: |
+          if [ "${{ inputs.resourcetype }}" = "apis" ]; then
+            ZIP_FILE="proxy.zip"
+          else
+            ZIP_FILE="sharedflowbundle.zip"
+          fi
+      
+          echo "RESOURCE_TYPE=$RESOURCE_TYPE"
+          echo "BUNDLE_DIR=$BUNDLE_DIR"
+          echo "ZIP_FILE=$ZIP_FILE"
+      
           test -d "$BUNDLE_DIR"
-          zip -r proxy.zip "$BUNDLE_DIR"
-
-      - name: "End group: Package"
-        if: always()
-        run: echo "::endgroup::"
+      
+          zip -r "$ZIP_FILE" "$BUNDLE_DIR"
+      
+          echo ""
+          echo "========== ZIP CREATED =========="
+          ls -lh "$ZIP_FILE"
 
       # -------------------------
       # TOKEN SERVICE AUTH
