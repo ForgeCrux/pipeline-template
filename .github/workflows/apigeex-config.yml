@@ -1,4 +1,4 @@
-name: Reusable Apigee Config Deployment (K8s Runner)
+name: Apigee Config Deployment
 
 on:
   workflow_call:
