@@ -1,0 +1,283 @@
+name: Reusable Apigee Config Deployment (K8s Runner)
+
+on:
+  workflow_call:
+    inputs:
+      apigee_org:
+        required: true
+        type: string
+
+      apigee_env:
+        required: false
+        type: string
+
+      resource_name:
+        required: true
+        type: string
+
+      config_path:
+        required: true
+        type: string
+
+      resourcetype:
+        required: true
+        type: string
+
+      node_version:
+        required: false
+        default: '18'
+        type: string
+
+    secrets:
+      GH_TOKEN:
+        required: true
+
+      APP_ID:
+        required: true
+
+      APP_PRIVATE_KEY:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+
+      # -------------------------
+      # SETUP
+      # -------------------------
+      - name: Start group Setup
+        run: echo "::group::Setup"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq curl
+
+      - name: Force GitHub auth
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+      - name: End group Setup
+        if: always()
+        run: echo "::endgroup::"
+
+      # -------------------------
+      # VALIDATION
+      # -------------------------
+      - name: Start group Validation
+        run: echo "::group::Validation"
+
+      - name: Validate Resource Type
+        run: |
+          case "${{ inputs.resourcetype }}" in
+            kvm|targetservers|apps)
+              echo "Valid resource type"
+              ;;
+            *)
+              echo "Invalid resource type"
+              exit 1
+              ;;
+          esac
+
+      - name: Validate Config File
+        run: |
+          if [ ! -f "${{ inputs.config_path }}" ]; then
+            echo "Config file not found"
+            exit 1
+          fi
+
+          cat "${{ inputs.config_path }}" | jq .
+
+      - name: End group Validation
+        if: always()
+        run: echo "::endgroup::"
+
+      # -------------------------
+      # OPTIONAL GITHUB APP TOKEN
+      # -------------------------
+      - name: Generate GitHub App token
+        id: app-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Select Token
+        id: token-select
+        shell: bash
+        run: |
+          TOKEN="${{ steps.app-token.outputs.token }}"
+
+          if [ -n "$TOKEN" ]; then
+            echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+          else
+            echo "token=${{ secrets.GH_TOKEN }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # -------------------------
+      # TOKEN AUTH
+      # -------------------------
+      - name: Start group Token auth
+        run: echo "::group::Token auth"
+
+      - name: Get Access Token
+        id: token
+        run: |
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" \
+            https://token-service-113875395623.us-central1.run.app/token)
+
+          STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
+
+          if [ "$STATUS" -ne 200 ]; then
+            echo "Failed to fetch token"
+            exit 1
+          fi
+
+          ACCESS_TOKEN=$(echo "$RESPONSE" | head -n 1 | jq -r '.access_token')
+
+          if [ -z "$ACCESS_TOKEN" ] || [ "$ACCESS_TOKEN" == "null" ]; then
+            echo "Invalid token"
+            exit 1
+          fi
+
+          echo "access_token=$ACCESS_TOKEN" >> $GITHUB_OUTPUT
+
+      - name: End group Token auth
+        if: always()
+        run: echo "::endgroup::"
+
+      # -------------------------
+      # BUILD URL
+      # -------------------------
+      - name: Start group Build URL
+        run: echo "::group::Build URL"
+
+      - name: Prepare URL
+        id: prepare-url
+        shell: bash
+        run: |
+
+          if [ "${{ inputs.resourcetype }}" = "kvm" ]; then
+
+            URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/keyvaluemaps"
+
+          elif [ "${{ inputs.resourcetype }}" = "targetservers" ]; then
+
+            URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/targetservers"
+
+          elif [ "${{ inputs.resourcetype }}" = "apps" ]; then
+
+            DEV_EMAIL=$(jq -r '.developerEmail' "${{ inputs.config_path }}")
+
+            URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/developers/${DEV_EMAIL}/apps"
+
+          fi
+
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+          echo "Resolved URL:"
+          echo "$URL"
+
+      - name: End group Build URL
+        if: always()
+        run: echo "::endgroup::"
+
+      # -------------------------
+      # DEPLOY RESOURCE
+      # -------------------------
+      - name: Start group Deployment
+        run: echo "::group::Deployment"
+
+      - name: Deploy Resource
+        shell: bash
+        run: |
+
+          URL="${{ steps.prepare-url.outputs.url }}"
+
+          TOKEN="${{ steps.token.outputs.access_token }}"
+
+          RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" \
+            -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d @"${{ inputs.config_path }}" \
+            "$URL")
+
+          echo ""
+          echo "================ RESPONSE ================"
+          echo "$RESPONSE"
+          echo "=========================================="
+          echo ""
+
+          STATUS=$(echo "$RESPONSE" | grep HTTP_STATUS | cut -d':' -f2)
+
+          if [ "$STATUS" -ne 200 ] && [ "$STATUS" -ne 201 ]; then
+            echo "Deployment failed"
+            exit 1
+          fi
+
+          echo "Deployment successful"
+
+      - name: End group Deployment
+        if: always()
+        run: echo "::endgroup::"
+
+      # -------------------------
+      # VERIFY
+      # -------------------------
+      - name: Start group Verify
+        run: echo "::group::Verify"
+
+      - name: Verify Deployment
+        shell: bash
+        run: |
+
+          TOKEN="${{ steps.token.outputs.access_token }}"
+
+          if [ "${{ inputs.resourcetype }}" = "kvm" ]; then
+
+            VERIFY_URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/keyvaluemaps/${{ inputs.resource_name }}"
+
+          elif [ "${{ inputs.resourcetype }}" = "targetservers" ]; then
+
+            VERIFY_URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/targetservers/${{ inputs.resource_name }}"
+
+          elif [ "${{ inputs.resourcetype }}" = "apps" ]; then
+
+            DEV_EMAIL=$(jq -r '.developerEmail' "${{ inputs.config_path }}")
+
+            VERIFY_URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/developers/${DEV_EMAIL}/apps/${{ inputs.resource_name }}"
+
+          fi
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $TOKEN" \
+            "$VERIFY_URL")
+
+          echo "VERIFY STATUS: $STATUS"
+
+          if [ "$STATUS" != "200" ]; then
+            echo "Verification failed"
+            exit 1
+          fi
+
+          echo "Verification successful"
+
+      - name: End group Verify
+        if: always()
+        run: echo "::endgroup::"
