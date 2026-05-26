@@ -1,6 +1,5 @@
 name: Reusable CI/CD - Microservice Deploy to GKE
 
-# Apply permissions to all jobs in this reusable workflow (or move to job-level)
 permissions:
   contents: read
   id-token: write
@@ -54,26 +53,24 @@ on:
         required: true
         type: string
         default: "dev"
-    # Remove this if using OIDC; keep only if you choose key-based auth:
-    # secrets:
-    #   GCP_SA_KEY:
-    #     required: true
+
+      # Deployment method: kubectl | helm
+      deploy_method:
+        description: "Choose deployment method"
+        required: false
+        type: string
+        default: "kubectl"
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    # If you prefer per-job permissions, uncomment and keep this matching top level:
-    # permissions:
-    #   contents: read
-    #   id-token: write
-
     env:
-      # Ensure trailing slash here once, so we can concatenate image name cleanly
       registry: "us-central1-docker.pkg.dev/methodical-mark-482504-j3/probestack-nonprod-apps/"
 
     steps:
       - uses: actions/checkout@v4
+
       # -------------------- Node --------------------
       - name: Setup Node.js
         if: inputs.tech == 'node'
@@ -86,17 +83,8 @@ jobs:
         if: inputs.tech == 'node'
         run: ${{ inputs.node_install }}
 
-      #- name: Node build
-      #  if: inputs.tech == 'node'
-      #  run: |
-      #    ls -la
-      #    npm install mobx styled-components --save
-      #    npm run build 
-      #    ls -la 
-      #    ls -la dist/
-          
       - name: Node build
-        if: inputs.tech == 'node'  
+        if: inputs.tech == 'node'
         env:
           CI: "false"
         run: ${{ inputs.node_build }} 
@@ -114,13 +102,12 @@ jobs:
         if: inputs.tech == 'java'
         run: ${{ inputs.java_build }}
         
+      # -------------------- GCP Auth --------------------
       - name: Authenticate to Google Cloud (OIDC)
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: projects/861433193200/locations/global/workloadIdentityPools/github-pool/providers/github-provider
           service_account: github-actions-deployer@probestack-prod.iam.gserviceaccount.com
-          #workload_identity_provider: projects/1076618220242/locations/global/workloadIdentityPools/github-pool/providers/github-provider
-          #service_account: github-actions-deployer@methodical-mark-482504-j3.iam.gserviceaccount.com
           
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
@@ -130,16 +117,15 @@ jobs:
       - name: Enable GKE gcloud auth plugin
         run: echo "USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> $GITHUB_ENV
 
-  
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
+      # -------------------- Build & Push --------------------
       - name: Build and Push Docker Image
         env:
           FULL_IMAGE: ${{ env.registry }}${{ inputs.image_name }}
         run: |
           set -e
-          pwd && ls -la
           IMAGE_TAG=${{ github.sha }}
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           BRANCH_NAME=${BRANCH_NAME//\//-}
@@ -155,6 +141,7 @@ jobs:
           echo "IMAGE_TAG=${TAG}" >> $GITHUB_ENV
           echo "SERVICE_NAME=${{ inputs.image_name }}" >> $GITHUB_ENV
 
+      # -------------------- GKE Setup --------------------
       - name: Install GKE auth plugin
         run: gcloud components install gke-gcloud-auth-plugin --quiet
       
@@ -164,7 +151,9 @@ jobs:
             --region ${{ inputs.cluster_region }} \
             --project ${{ inputs.project_id }}
 
-      - name: Deploy to GKE
+      # -------------------- Deploy --------------------
+      - name: Deploy with kubectl
+        if: inputs.deploy_method == 'kubectl'
         run: |
           : "${IMAGE_TAG:?IMAGE_TAG not set}"
           : "${SERVICE_NAME:?SERVICE_NAME not set}"
@@ -174,7 +163,17 @@ jobs:
       
           kubectl rollout status deployment/${{ inputs.service_name }} \
             -n ${{ inputs.namespace }}
-            
+
+      - name: Deploy with Helm
+        if: inputs.deploy_method == 'helm'
+        run: |
+          helm upgrade --install ${{ inputs.service_name }} ./helm \
+            --namespace ${{ inputs.namespace }} \
+            --set image.repository=${{ env.registry }}${{ inputs.image_name }} \
+            --set image.tag=${{ env.IMAGE_TAG }} \
+            --set nameOverride=${{ inputs.service_name }}
+
+      # -------------------- Verify --------------------
       - name: Verify GKE Deployment
         run: |
           set -e
@@ -184,4 +183,4 @@ jobs:
             sleep 10
           done
           kubectl describe deployment ${{ inputs.service_name }} -n ${{ inputs.namespace }} | grep -i Image
-          echo "Sucessfully Build ${{ inputs.service_name }} and Deloyed to ${{ inputs.namespace }} namespace"
+          echo "Successfully built ${{ inputs.service_name }} and deployed to ${{ inputs.namespace }} namespace"
