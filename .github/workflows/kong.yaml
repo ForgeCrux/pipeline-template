@@ -1,0 +1,71 @@
+name: Kong Reusable Deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+      kong_config_path:
+        required: true
+        type: string
+
+      deck_version:
+        required: false
+        type: string
+        default: "1.43.0"
+
+      kong_addr:
+        required: true
+        type: string
+
+      validate_only:
+        required: false
+        type: boolean
+        default: false
+
+    secrets:
+      kong_token:
+        required: true
+
+jobs:
+  kong-deploy:
+    name: Kong Deployment
+    runs-on: ubuntu-latest
+
+    environment:
+      name: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install decK
+        run: |
+          curl -sL https://github.com/kong/deck/releases/download/v${{ inputs.deck_version }}/deck_${{ inputs.deck_version }}_linux_amd64.tar.gz -o deck.tar.gz
+          tar -xzf deck.tar.gz
+          sudo mv deck /usr/local/bin/deck
+          deck version
+
+      - name: Validate Kong Configuration
+        run: |
+          deck validate \
+            --kong-addr ${{ inputs.kong_addr }} \
+            --headers "kong-admin-token:${{ secrets.kong_token }}" \
+            ${{ inputs.kong_config_path }}
+
+      - name: Diff Kong Configuration
+        run: |
+          deck gateway diff \
+            --kong-addr ${{ inputs.kong_addr }} \
+            --headers "kong-admin-token:${{ secrets.kong_token }}" \
+            ${{ inputs.kong_config_path }}
+
+      - name: Sync Kong Configuration
+        if: ${{ inputs.validate_only == false }}
+        run: |
+          deck gateway sync \
+            --kong-addr ${{ inputs.kong_addr }} \
+            --headers "kong-admin-token:${{ secrets.kong_token }}" \
+            ${{ inputs.kong_config_path }}
