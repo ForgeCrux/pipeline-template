@@ -1,0 +1,50 @@
+name: Delete Kubernetes Deployment
+
+on:
+  workflow_call:
+    inputs:
+      namespace:
+        description: Kubernetes namespace
+        required: true
+        type: string
+
+      deployment_name:
+        description: Deployment name
+        required: true
+        type: string
+
+      kubeconfig_secret:
+        description: Secret containing base64 encoded kubeconfig
+        required: true
+        type: string
+
+jobs:
+  delete-deployment:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: latest
+
+      - name: Configure kubeconfig
+        env:
+          KUBECONFIG_DATA: ${{ secrets[inputs.kubeconfig_secret] }}
+        run: |
+          mkdir -p ~/.kube
+          echo "$KUBECONFIG_DATA" | base64 -d > ~/.kube/config
+
+      - name: Delete deployment
+        run: |
+          kubectl delete deployment ${{ inputs.deployment_name }} \
+            -n ${{ inputs.namespace }} \
+            --ignore-not-found=true
+
+      - name: Verify deletion
+        run: |
+          kubectl get deployment ${{ inputs.deployment_name }} \
+            -n ${{ inputs.namespace }} || true
