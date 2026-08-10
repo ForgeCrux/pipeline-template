@@ -8,6 +8,9 @@ on:
         required: true
       resourcetype:
         required: true
+      projectId:
+        description: "GCP project ID"
+        required: false
 
 env:
   ORG_NAME: ForgeCrux
