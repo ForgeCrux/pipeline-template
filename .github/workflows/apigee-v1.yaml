@@ -244,7 +244,7 @@ jobs:
           echo "Repository : $NEXUS_REPOSITORY"
           echo "Artifact   : $ARTIFACT_NAME"
           echo "Version    : $VERSION"
-          echo "Package    : $ZIP_FILE"
+          echo "Package    : $ARTIFACT_NAME"
           echo "========================================"
 
           curl \
@@ -252,7 +252,7 @@ jobs:
             --show-error \
             --silent \
             -u "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" \
-            --upload-file "$ZIP_FILE" \
+            --upload-file "$ARTIFACT_NAME" \
             "$UPLOAD_URL"
 
           echo ""
