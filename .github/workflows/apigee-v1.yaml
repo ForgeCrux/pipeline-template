@@ -115,18 +115,6 @@ jobs:
           fi
           
       # -------------------------
-      # Read Version from release.properties
-      # -------------------------
-      - name: Read version
-        id: version
-        run: |
-          VERSION=$(grep '^version=' release.properties | cut -d'=' -f2)
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          FINAL_VERSION="${VERSION}-${SHORT_SHA}"
-          echo "VERSION=$FINAL_VERSION" >> "$GITHUB_OUTPUT"
-          echo "Release version: $VERSION"
-    
-      # -------------------------
       # OPTIONAL LINT
       # -------------------------
       - name: "Start group: Lint"
@@ -233,10 +221,8 @@ jobs:
             FINAL_VERSION="${V1}-${SHORT_SHA}"
             VERSION="${FINAL_VERSION}"
           fi
-          echo "http://35.226.113.107:8081/repository/raw-releases/${{ inputs.deploy_proxy }}/${VERSION}/${ARTIFACT_NAME}"
+          
           UPLOAD_URL="${NEXUS_URL%/}/repository/${NEXUS_REPOSITORY}/${{ inputs.deploy_proxy }}/${VERSION}/${ARTIFACT_NAME}"
-          ls -la
-          echo ${UPLOAD_URL}
           
           echo "========================================"
           echo "NEXUS UPLOAD"
