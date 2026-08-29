@@ -32,6 +32,14 @@ on:
         required: true
       APP_PRIVATE_KEY:
         required: true
+      NEXUS_URL:
+        required: true
+      NEXUS_USERNAME:
+        required: true
+      NEXUS_PASSWORD:
+        required: true
+      NEXUS_REPOSITORY:
+        required: true
 
 permissions:
   contents: read
