@@ -219,7 +219,7 @@ jobs:
             echo "ERROR: Package not found: $ZIP_FILE"
             exit 1
           fi
-
+           
           NEXUS_URL="${{ secrets.NEXUS_URL }}"
           NEXUS_REPOSITORY="${{ secrets.NEXUS_REPOSITORY }}"
 
@@ -231,7 +231,9 @@ jobs:
           fi
 
           UPLOAD_URL="${NEXUS_URL%/}/repository/${NEXUS_REPOSITORY}/${{ inputs.deploy_proxy }}/${VERSION}/${ARTIFACT_NAME}"
-
+          ls -la
+          echo ${UPLOAD_URL}
+          
           echo "========================================"
           echo "NEXUS UPLOAD"
           echo "========================================"
