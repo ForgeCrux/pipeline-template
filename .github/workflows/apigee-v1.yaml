@@ -99,13 +99,25 @@ jobs:
         shell: bash
         run: |
           TOKEN="${{ steps.app-token.outputs.token }}"
-      
+         
           if [ -n "$TOKEN" ]; then
             echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
           else
             echo "token=${{ secrets.GH_TOKEN }}" >> "$GITHUB_OUTPUT"
           fi
-
+          
+      # -------------------------
+      # Read Version from release.properties
+      # -------------------------
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(grep '^version=' release.properties | cut -d'=' -f2)
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          FINAL_VERSION="${VERSION}-${SHORT_SHA}"
+          echo "VERSION=$FINAL_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release version: $FINAL_VERSION"
+    
       # -------------------------
       # OPTIONAL LINT
       # -------------------------
@@ -148,7 +160,7 @@ jobs:
       - name: "End group: Lint"
         if: always()
         run: echo "::endgroup::"
-
+        
       # -------------------------
       # PACKAGE
       # -------------------------
@@ -176,6 +188,69 @@ jobs:
           echo "========== ZIP CREATED =========="
           ls -lh "$ZIP_FILE"
 
+      # ============================================================
+      # NEXUS PUSH
+      # ============================================================
+
+      - name: Start group Nexus Push
+        run: echo "::group::Nexus Push"
+
+      - name: Push Package to Nexus
+        shell: bash
+        run: |
+          set -e
+          if [ "${{ inputs.resourcetype }}" = "apis" ]; then
+            ZIP_FILE="proxy.zip"
+            ARTIFACT_NAME="${{ inputs.deploy_proxy }}.zip"
+          else
+            ZIP_FILE="sharedflowbundle.zip"
+            ARTIFACT_NAME="${{ inputs.deploy_proxy }}.zip"
+          fi
+
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: Package not found: $ZIP_FILE"
+            exit 1
+          fi
+
+          NEXUS_URL="${{ secrets.NEXUS_URL }}"
+          NEXUS_REPOSITORY="${{ secrets.NEXUS_REPOSITORY }}"
+
+          NEXUS_USERNAME="${{ secrets.NEXUS_USERNAME }}"
+          NEXUS_PASSWORD="${{ secrets.NEXUS_PASSWORD }}"
+
+          VERSION="${{ inputs.nexus_version }}-${GITHUB_SHA}"
+
+          if [ -z "$VERSION" ]; then
+            VERSION="${GITHUB_SHA}"
+          fi
+
+          UPLOAD_URL="${NEXUS_URL%/}/repository/${NEXUS_REPOSITORY}/${{ inputs.deploy_proxy }}/${VERSION}/${ARTIFACT_NAME}"
+
+          echo "========================================"
+          echo "NEXUS UPLOAD"
+          echo "========================================"
+          echo "Repository : $NEXUS_REPOSITORY"
+          echo "Artifact   : $ARTIFACT_NAME"
+          echo "Version    : $VERSION"
+          echo "Package    : $ZIP_FILE"
+          echo "========================================"
+
+          curl \
+            --fail \
+            --show-error \
+            --silent \
+            -u "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" \
+            --upload-file "$ZIP_FILE" \
+            "$UPLOAD_URL"
+
+          echo ""
+          echo "Nexus upload successful"
+
+
+      - name: End group Nexus Push
+        if: always()
+        run: echo "::endgroup::"
+        
       # -------------------------
       # TOKEN SERVICE AUTH
       # -------------------------
