@@ -191,6 +191,7 @@ jobs:
           test -d "$BUNDLE_DIR"
       
           zip -r "$ZIP_FILE" "$BUNDLE_DIR"
+          zip -r "${{ inputs.deploy_proxy }}.zip" "$BUNDLE_DIR"
       
           echo ""
           echo "========== ZIP CREATED =========="
