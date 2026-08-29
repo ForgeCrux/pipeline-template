@@ -32,13 +32,13 @@ on:
         required: true
       APP_PRIVATE_KEY:
         required: true
-      NEXUS_URL:
+      NEXUS_URL: 'http://35.226.113.107:8081'
         required: true
-      NEXUS_USERNAME:
+      NEXUS_USERNAME: 'nexus'
         required: true
-      NEXUS_PASSWORD:
+      NEXUS_PASSWORD: 'nexus'
         required: true
-      NEXUS_REPOSITORY:
+      NEXUS_REPOSITORY: 'raw-releases'
         required: true
 
 permissions:
