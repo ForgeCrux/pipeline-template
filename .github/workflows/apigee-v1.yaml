@@ -116,7 +116,7 @@ jobs:
           SHORT_SHA=$(git rev-parse --short HEAD)
           FINAL_VERSION="${VERSION}-${SHORT_SHA}"
           echo "VERSION=$FINAL_VERSION" >> "$GITHUB_OUTPUT"
-          echo "Release version: $FINAL_VERSION"
+          echo "Release version: $VERSION"
     
       # -------------------------
       # OPTIONAL LINT
