@@ -182,11 +182,8 @@ jobs:
           set -euo pipefail
 
           if [ ! -f release.properties ]; then
-
             echo "ERROR: release.properties not found"
-
             exit 1
-
           fi
 
           if ! grep -q '^version=' release.properties; then
@@ -225,7 +222,7 @@ jobs:
         run: |
           set -euo pipefail
           CONFIG_URL="${CICD_CONFIG_URL%/}/${CICD_CONFIG_ID}/all?filtered=true"
-          echo "Fetching ForgeSphere CI/CD configuration..."
+          echo "Fetching ForgeSphere CI/CD configuration... ${CONFIG_URL}"
 
           HTTP_STATUS=$(curl \
             --silent \
