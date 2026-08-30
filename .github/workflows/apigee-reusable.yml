@@ -246,11 +246,9 @@ jobs:
           
           jq empty cicd-config.json
 
-          APIGEE_PROXY=$(jq -r '.APIGEE_PROXY // empty' cicd-config.json)
-          if [ -z "$APIGEE_PROXY" ]; then
-            echo "ERROR: APIGEE_PROXY not found"
-            exit 1
-          fi
+          # Extract only APIGEE_PROXY configuration
+          jq '.pipelineConfigs.APIGEE_PROXY' \
+            cicd-config.json > apigee-config.json
           
           echo "APIGEE_PROXY: $APIGEE_PROXY"
           # ------------------------------------------------
@@ -262,7 +260,7 @@ jobs:
             | .branches[]
             | select(.tag == "merge")
             | .name
-          ' cicd-config.json | head -n 1)
+          ' apigee-config.json | head -n 1)
 
 
           MERGE_TAG=$(jq -r '
@@ -270,7 +268,7 @@ jobs:
             | .branches[]
             | select(.tag == "merge")
             | .tag
-          ' cicd-config.json | head -n 1)
+          ' apigee-config.json | head -n 1)
 
 
           if [ -z "$MERGE_BRANCH" ] || [ "$MERGE_BRANCH" = "null" ]; then
@@ -287,21 +285,21 @@ jobs:
           # ------------------------------------------------
 
           SONAR_HOST_URL=$(jq -r '
-            .pipelineConfigs.MICROSERVICE
+            .pipelineConfigs.APIGEE_PROXY
             .securityToolConfigs.sonarscanner.SONAR_HOST_URL
-          ' cicd-config.json)
+          ' apigee-config.json)
 
 
           SONAR_TOKEN=$(jq -r '
-            .pipelineConfigs.MICROSERVICE
+            .pipelineConfigs.APIGEE_PROXY
             .securityToolConfigs.sonarscanner.SONAR_TOKEN
-          ' cicd-config.json)
+          ' apigee-config.json)
 
 
           SONAR_PROJECT_KEY=$(jq -r '
-            .pipelineConfigs.MICROSERVICE
+            .pipelineConfigs.APIGEE_PROXY
             .securityToolConfigs.sonarscanner.SONAR_PROJECT_KEY
-          ' cicd-config.json)
+          ' apigee-config.json)
 
 
           # ------------------------------------------------
@@ -343,27 +341,27 @@ jobs:
           # ------------------------------------------------
 
           NEXUS_URL=$(jq -r '
-            .pipelineConfigs.MICROSERVICE
+            .pipelineConfigs.APIGEE_PROXY
             .artifactToolConfigs.nexus.NEXUS_URL // empty
-          ' cicd-config.json)
+          ' apigee-config.json)
 
 
           NEXUS_USERNAME=$(jq -r '
-            .pipelineConfigs.MICROSERVICE
+            .pipelineConfigs.APIGEE_PROXY
             .artifactToolConfigs.nexus.NEXUS_USERNAME // empty
-          ' cicd-config.json)
+          ' apigee-config.json)
 
 
           NEXUS_PASSWORD=$(jq -r '
-            .pipelineConfigs.MICROSERVICE
+            .pipelineConfigs.APIGEE_PROXY
             .artifactToolConfigs.nexus.NEXUS_PASSWORD // empty
-          ' cicd-config.json)
+          ' apigee-config.json)
 
 
           NEXUS_REPOSITORY=$(jq -r '
-            .pipelineConfigs.MICROSERVICE
+            .pipelineConfigs.APIGEE_PROXY
             .artifactToolConfigs.nexus.NEXUS_REPOSITORY // empty
-          ' cicd-config.json)
+          ' apigee-config.json)
 
 
           # ------------------------------------------------
@@ -995,6 +993,6 @@ jobs:
         if: always()
         run: |
 
-          rm -f cicd-config.json
+          rm -f apigee-config.json
 
           echo "Temporary configuration removed"
