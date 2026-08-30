@@ -245,6 +245,14 @@ jobs:
           fi
           
           jq empty cicd-config.json
+
+          APIGEE_PROXY=$(jq -r '.APIGEE_PROXY // empty' cicd-config.json)
+          if [ -z "$APIGEE_PROXY" ]; then
+            echo "ERROR: APIGEE_PROXY not found"
+            exit 1
+          fi
+          
+          echo "APIGEE_PROXY: $APIGEE_PROXY"
           # ------------------------------------------------
           # BRANCH STRATEGY
           # ------------------------------------------------
