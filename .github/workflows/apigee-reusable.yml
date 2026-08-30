@@ -29,6 +29,10 @@ on:
         default: '18'
         type: string
 
+      branch_name:
+        required: false
+        type: string
+
       # -------------------------------------------------
       # FORGESPHERE
       # -------------------------------------------------
