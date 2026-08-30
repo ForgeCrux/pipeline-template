@@ -247,14 +247,12 @@ jobs:
           jq empty cicd-config.json
 
           # Extract only APIGEE_PROXY configuration
-          jq '.pipelineConfigs.APIGEE_PROXY' \
-            cicd-config.json > apigee-config.json
+          jq '.pipelineConfigs.APIGEE_PROXY' cicd-config.json > apigee-config.json
 
           echo "APIGEE_PROXY: $APIGEE_PROXY"
           # ------------------------------------------------
           # BRANCH STRATEGY
           # ------------------------------------------------
-
           MERGE_BRANCH=$(jq -r '
             .strategies[]
             | .branches[]
@@ -262,8 +260,7 @@ jobs:
             | .name
           ' apigee-config.json | head -n 1)
 
-
-          MERGE_TAG=$(jq -r '
+           MERGE_TAG=$(jq -r '
             .strategies[]
             | .branches[]
             | select(.tag == "merge")
@@ -287,80 +284,50 @@ jobs:
           SONAR_HOST_URL=$(jq -r '
             .securityToolConfigs.sonarscanner.SONAR_HOST_URL
           ' apigee-config.json)
-
-
           SONAR_TOKEN=$(jq -r '
             .securityToolConfigs.sonarscanner.SONAR_TOKEN
           ' apigee-config.json)
-
-
           SONAR_PROJECT_KEY=$(jq -r '
             .securityToolConfigs.sonarscanner.SONAR_PROJECT_KEY
           ' apigee-config.json)
-
-
           # ------------------------------------------------
           # VALIDATE SONAR
           # ------------------------------------------------
 
           if [ -z "$SONAR_HOST_URL" ] ||
              [ "$SONAR_HOST_URL" = "null" ]; then
-
             echo "ERROR: SONAR_HOST_URL not configured"
-
             exit 1
-
           fi
-
 
           if [ -z "$SONAR_TOKEN" ] ||
              [ "$SONAR_TOKEN" = "null" ]; then
-
             echo "ERROR: SONAR_TOKEN not configured"
-
             exit 1
-
           fi
-
-
           if [ -z "$SONAR_PROJECT_KEY" ] ||
              [ "$SONAR_PROJECT_KEY" = "null" ]; then
-
             echo "ERROR: SONAR_PROJECT_KEY not configured"
-
             exit 1
-
           fi
-
-
           # ------------------------------------------------
           # NEXUS CONFIGURATION
           # ------------------------------------------------
-
           NEXUS_URL=$(jq -r '
-            .artifactToolConfigs.nexus.NEXUS_URL // empty
+            .artifactToolConfigs.nexus.NEXUS_URL
           ' apigee-config.json)
-
-
           NEXUS_USERNAME=$(jq -r '
-            .artifactToolConfigs.nexus.NEXUS_USERNAME // empty
+            .artifactToolConfigs.nexus.NEXUS_USERNAME
           ' apigee-config.json)
-
-
           NEXUS_PASSWORD=$(jq -r '
-            .artifactToolConfigs.nexus.NEXUS_PASSWORD // empty
+            .artifactToolConfigs.nexus.NEXUS_PASSWORD
           ' apigee-config.json)
-
-
           NEXUS_REPOSITORY=$(jq -r '
-            .artifactToolConfigs.nexus.NEXUS_REPOSITORY // empty
+            .artifactToolConfigs.nexus.NEXUS_REPOSITORY
           ' apigee-config.json)
-
-
           # ------------------------------------------------
           # MASK SECRETS
           # ------------------------------------------------
-
           echo "::add-mask::$SONAR_TOKEN"
           if [ -n "$NEXUS_PASSWORD" ]; then
             echo "::add-mask::$NEXUS_PASSWORD"
