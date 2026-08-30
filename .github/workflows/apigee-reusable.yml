@@ -219,11 +219,8 @@ jobs:
           CICD_CONFIG_ID: ${{ inputs.cicd_config_id }}
 
         run: |
-
           set -euo pipefail
-
           CONFIG_URL="${CICD_CONFIG_URL%/}/${CICD_CONFIG_ID}/all?filtered=true"
-
           echo "Fetching ForgeSphere CI/CD configuration..."
 
           HTTP_STATUS=$(curl \
@@ -235,28 +232,18 @@ jobs:
             "$CONFIG_URL")
 
           if [ "$HTTP_STATUS" != "200" ]; then
-
             echo "ERROR: Failed to retrieve CI/CD configuration"
-
             echo "HTTP status: $HTTP_STATUS"
-
             exit 1
-
           fi
 
 
           if [ ! -s cicd-config.json ]; then
-
             echo "ERROR: Empty CI/CD configuration"
-
             exit 1
-
           fi
-
-
+          
           jq empty cicd-config.json
-
-
           # ------------------------------------------------
           # BRANCH STRATEGY
           # ------------------------------------------------
@@ -440,7 +427,6 @@ jobs:
       - name: Generate GitHub App token
         id: app-token
         continue-on-error: true
-        if: ${{ secrets.APP_ID != '' && secrets.APP_PRIVATE_KEY != '' }}
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.APP_ID }}
