@@ -1,4 +1,3 @@
-```yaml
 name: Reusable Apigee CI/CD (K8s Runner)
 
 on:
@@ -1008,4 +1007,3 @@ jobs:
           rm -f cicd-config.json
 
           echo "Temporary configuration removed"
-```
