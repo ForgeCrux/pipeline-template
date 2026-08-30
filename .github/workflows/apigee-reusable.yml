@@ -247,7 +247,10 @@ jobs:
           jq empty cicd-config.json
 
           # Extract only APIGEE_PROXY configuration
-          jq '.pipelineConfigs.APIGEE_PROXY' cicd-config.json > apigee-config.json
+          jq '{
+            strategies: .strategies,
+            pipelineConfig: .pipelineConfigs.APIGEE_PROXY
+          }' cicd-config.json > apigee-config.json
           cat apigee-config.json
 
           echo "APIGEE_PROXY: $APIGEE_PROXY"
