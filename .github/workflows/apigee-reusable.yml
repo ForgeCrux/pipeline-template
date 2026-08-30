@@ -250,9 +250,6 @@ jobs:
           jq '.pipelineConfigs.APIGEE_PROXY' \
             cicd-config.json > apigee-config.json
 
-          cat apigee-config.json 
-          exit 1
-          
           echo "APIGEE_PROXY: $APIGEE_PROXY"
           # ------------------------------------------------
           # BRANCH STRATEGY
@@ -288,19 +285,16 @@ jobs:
           # ------------------------------------------------
 
           SONAR_HOST_URL=$(jq -r '
-            .pipelineConfigs.APIGEE_PROXY
             .securityToolConfigs.sonarscanner.SONAR_HOST_URL
           ' apigee-config.json)
 
 
           SONAR_TOKEN=$(jq -r '
-            .pipelineConfigs.APIGEE_PROXY
             .securityToolConfigs.sonarscanner.SONAR_TOKEN
           ' apigee-config.json)
 
 
           SONAR_PROJECT_KEY=$(jq -r '
-            .pipelineConfigs.APIGEE_PROXY
             .securityToolConfigs.sonarscanner.SONAR_PROJECT_KEY
           ' apigee-config.json)
 
@@ -344,25 +338,21 @@ jobs:
           # ------------------------------------------------
 
           NEXUS_URL=$(jq -r '
-            .pipelineConfigs.APIGEE_PROXY
             .artifactToolConfigs.nexus.NEXUS_URL // empty
           ' apigee-config.json)
 
 
           NEXUS_USERNAME=$(jq -r '
-            .pipelineConfigs.APIGEE_PROXY
             .artifactToolConfigs.nexus.NEXUS_USERNAME // empty
           ' apigee-config.json)
 
 
           NEXUS_PASSWORD=$(jq -r '
-            .pipelineConfigs.APIGEE_PROXY
             .artifactToolConfigs.nexus.NEXUS_PASSWORD // empty
           ' apigee-config.json)
 
 
           NEXUS_REPOSITORY=$(jq -r '
-            .pipelineConfigs.APIGEE_PROXY
             .artifactToolConfigs.nexus.NEXUS_REPOSITORY // empty
           ' apigee-config.json)
 
@@ -372,56 +362,30 @@ jobs:
           # ------------------------------------------------
 
           echo "::add-mask::$SONAR_TOKEN"
-
-
           if [ -n "$NEXUS_PASSWORD" ]; then
-
             echo "::add-mask::$NEXUS_PASSWORD"
-
           fi
-
-
           # ------------------------------------------------
           # OUTPUTS
           # ------------------------------------------------
-
           {
-
             echo "merge_branch=$MERGE_BRANCH"
-
             echo "merge_tag=$MERGE_TAG"
-
             echo "sonar_host_url=$SONAR_HOST_URL"
-
             echo "sonar_project_key=$SONAR_PROJECT_KEY"
-
             echo "sonar_token=$SONAR_TOKEN"
-
             echo "nexus_url=$NEXUS_URL"
-
             echo "nexus_username=$NEXUS_USERNAME"
-
             echo "nexus_password=$NEXUS_PASSWORD"
-
             echo "nexus_repository=$NEXUS_REPOSITORY"
-
           } >> "$GITHUB_OUTPUT"
-
-
           echo "========================================"
-
           echo "ForgeSphere configuration loaded"
-
           echo "Merge branch : $MERGE_BRANCH"
-
           echo "Merge tag    : $MERGE_TAG"
-
           echo "Sonar URL    : $SONAR_HOST_URL"
-
           echo "Sonar Project: $SONAR_PROJECT_KEY"
-
           echo "Nexus Config : $([ -n "$NEXUS_URL" ] && echo "configured" || echo "not configured")"
-
           echo "========================================"
 
 
