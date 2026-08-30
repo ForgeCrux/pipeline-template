@@ -55,14 +55,6 @@ on:
       GH_TOKEN:
         required: true
 
-      # Optional GitHub App
-      APP_ID:
-        required: false
-
-      APP_PRIVATE_KEY:
-        required: false
-
-
 # =========================================================
 # PERMISSIONS
 # =========================================================
