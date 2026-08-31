@@ -417,7 +417,7 @@ jobs:
         run: echo "::group::Nexus Push"
 
       - name: Push Package to Nexus
-        if: steps.config.outputs.nexus_url != ''
+        if: steps.config.outputs.nexus_url != '' && steps.config.outputs.merge_branch == inputs.branch_name
         shell: bash
         env:
           NEXUS_URL: ${{ steps.config.outputs.nexus_url }}
