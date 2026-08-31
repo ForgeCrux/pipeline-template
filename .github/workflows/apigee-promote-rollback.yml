@@ -1,0 +1,452 @@
+name: Reusable Apigee Promote / Rollback
+
+on:
+  workflow_call:
+    inputs:
+
+      operation:
+        description: "Deployment operation: promote or rollback"
+        required: true
+        type: string
+
+      apigee_org:
+        description: "Target Apigee X organization"
+        required: true
+        type: string
+
+      apigee_env:
+        description: "Target Apigee X environment"
+        required: true
+        type: string
+
+      deploy_proxy:
+        description: "API Proxy or Shared Flow name"
+        required: true
+        type: string
+
+      resourcetype:
+        description: "apis or sharedflows"
+        required: true
+        type: string
+
+      nexus_version:
+        description: "Exact Nexus version to promote or rollback"
+        required: true
+        type: string
+
+      nexus_artifact_name:
+        description: "Optional Nexus artifact filename"
+        required: false
+        default: ''
+        type: string
+
+      token_service_url:
+        description: "Service used to obtain Apigee OAuth access token"
+        required: false
+        default: "https://token-service-113875395623.us-central1.run.app/token"
+        type: string
+
+    secrets:
+      NEXUS_URL:
+        required: true
+      NEXUS_USERNAME:
+        required: true
+      NEXUS_PASSWORD:
+        required: true
+      NEXUS_REPOSITORY:
+        required: true
+
+
+permissions:
+  contents: read
+
+
+jobs:
+
+  promote-rollback:
+
+    name: ${{ inputs.operation }} ${{ inputs.deploy_proxy }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+
+      # ============================================================
+      # VALIDATION
+      # ============================================================
+      - name: Start Validation
+        run: echo "::group::Validation"
+
+      - name: Validate Inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          OPERATION="${{ inputs.operation }}"
+          RESOURCE_TYPE="${{ inputs.resourcetype }}"
+
+          if [[ "$OPERATION" != "promote" && "$OPERATION" != "rollback" ]]; then
+            echo "ERROR: operation must be promote or rollback"
+            echo "Received: $OPERATION"
+            exit 1
+          fi
+
+          if [[ "$RESOURCE_TYPE" != "apis" && "$RESOURCE_TYPE" != "sharedflows" ]]; then
+            echo "ERROR: resourcetype must be apis or sharedflows"
+            echo "Received: $RESOURCE_TYPE"
+            exit 1
+          fi
+
+          if [ -z "${{ inputs.nexus_version }}" ]; then
+            echo "ERROR: nexus_version must not be empty"
+            exit 1
+          fi
+
+          echo "=========================================="
+          echo "APIGEE RELEASE REQUEST"
+          echo "=========================================="
+          echo "Operation      : $OPERATION"
+          echo "Organization   : ${{ inputs.apigee_org }}"
+          echo "Environment    : ${{ inputs.apigee_env }}"
+          echo "Resource       : $RESOURCE_TYPE"
+          echo "Name           : ${{ inputs.deploy_proxy }}"
+          echo "Nexus Version  : ${{ inputs.nexus_version }}"
+          echo "=========================================="
+
+      - name: End Validation
+        if: always()
+        run: echo "::endgroup::"
+      # ============================================================
+      # DOWNLOAD ARTIFACT FROM NEXUS
+      # ============================================================
+      - name: Start Nexus Download
+        run: echo "::group::Nexus Download"
+
+      - name: Download Package from Nexus
+        id: nexus
+        shell: bash
+        env:
+          NEXUS_URL: ${{ secrets.NEXUS_URL }}
+          NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+          NEXUS_REPOSITORY: ${{ secrets.NEXUS_REPOSITORY }}
+          NEXUS_VERSION: ${{ inputs.nexus_version }}
+        run: |
+          set -euo pipefail
+
+          ARTIFACT_NAME="${{ inputs.nexus_artifact_name }}"
+
+          if [ -z "$ARTIFACT_NAME" ]; then
+            ARTIFACT_NAME="${{ inputs.deploy_proxy }}.zip"
+          fi
+
+          ARTIFACT_FILE="deployment-package.zip"
+
+          DOWNLOAD_URL="${NEXUS_URL%/}/repository/${NEXUS_REPOSITORY}/${{ inputs.deploy_proxy }}/${NEXUS_VERSION}/${ARTIFACT_NAME}"
+
+          echo "=========================================="
+          echo "NEXUS DOWNLOAD"
+          echo "=========================================="
+          echo "Repository : $NEXUS_REPOSITORY"
+          echo "Proxy      : ${{ inputs.deploy_proxy }}"
+          echo "Version    : $NEXUS_VERSION"
+          echo "Artifact   : $ARTIFACT_NAME"
+          echo "=========================================="
+
+          HTTP_STATUS=$(curl \
+            --silent \
+            --show-error \
+            --location \
+            --user "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" \
+            --output "$ARTIFACT_FILE" \
+            --write-out "%{http_code}" \
+            "$DOWNLOAD_URL")
+
+          echo "Nexus HTTP Status: $HTTP_STATUS"
+
+          if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
+            echo "ERROR: Failed to download artifact from Nexus"
+            rm -f "$ARTIFACT_FILE"
+            exit 1
+          fi
+
+          if [ ! -s "$ARTIFACT_FILE" ]; then
+            echo "ERROR: Nexus artifact is empty"
+            exit 1
+          fi
+
+          echo ""
+          echo "Downloaded package:"
+          ls -lh "$ARTIFACT_FILE"
+
+          echo "artifact_file=$ARTIFACT_FILE" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Validate ZIP Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -t "${{ steps.nexus.outputs.artifact_file }}"
+          echo ""
+          echo "========== PACKAGE CONTENT =========="
+          unzip -l "${{ steps.nexus.outputs.artifact_file }}"
+
+      - name: End Nexus Download
+        if: always()
+        run: echo "::endgroup::"
+
+
+      # ============================================================
+      # APIGEE AUTHENTICATION
+      # ============================================================
+
+      - name: Start Apigee Authentication
+        run: echo "::group::Apigee Authentication"
+
+      - name: Get Apigee Access Token
+        id: token
+        shell: bash
+        env:
+          TOKEN_SERVICE_URL: ${{ inputs.token_service_url }}
+        run: |
+          set -euo pipefail
+
+          RESPONSE_FILE=$(mktemp)
+
+          HTTP_STATUS=$(curl \
+            --silent \
+            --show-error \
+            --location \
+            --output "$RESPONSE_FILE" \
+            --write-out "%{http_code}" \
+            "$TOKEN_SERVICE_URL")
+
+          if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
+            echo "ERROR: Failed to obtain Apigee access token"
+            cat "$RESPONSE_FILE"
+            rm -f "$RESPONSE_FILE"
+            exit 1
+          fi
+
+          ACCESS_TOKEN=$(jq -r '.access_token // empty' "$RESPONSE_FILE")
+
+          rm -f "$RESPONSE_FILE"
+
+          if [ -z "$ACCESS_TOKEN" ]; then
+            echo "ERROR: access_token missing from token service response"
+            exit 1
+          fi
+
+          echo "::add-mask::$ACCESS_TOKEN"
+          echo "access_token=$ACCESS_TOKEN" >> "$GITHUB_OUTPUT"
+
+          echo "Apigee access token obtained successfully"
+
+      - name: End Apigee Authentication
+        if: always()
+        run: echo "::endgroup::"
+      # ============================================================
+      # IMPORT PACKAGE INTO APIGEE
+      # ============================================================
+      - name: Start Apigee Import
+        run: echo "::group::Apigee Import"
+
+      - name: Import Nexus Package into Apigee
+        id: import
+        shell: bash
+        env:
+          ACCESS_TOKEN: ${{ steps.token.outputs.access_token }}
+          ARTIFACT_FILE: ${{ steps.nexus.outputs.artifact_file }}
+        run: |
+          set -euo pipefail
+          RESOURCE_TYPE="${{ inputs.resourcetype }}"
+          IMPORT_URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/${RESOURCE_TYPE}?action=import&name=${{ inputs.deploy_proxy }}"
+          RESPONSE_FILE=$(mktemp)
+
+          echo "=========================================="
+          echo "APIGEE IMPORT"
+          echo "=========================================="
+          echo "Operation    : ${{ inputs.operation }}"
+          echo "Organization : ${{ inputs.apigee_org }}"
+          echo "Resource     : $RESOURCE_TYPE"
+          echo "Name         : ${{ inputs.deploy_proxy }}"
+          echo "Version      : ${{ inputs.nexus_version }}"
+          echo "=========================================="
+
+          HTTP_STATUS=$(curl \
+            --silent \
+            --show-error \
+            --location \
+            --request POST \
+            --header "Authorization: Bearer $ACCESS_TOKEN" \
+            --form "file=@${ARTIFACT_FILE}" \
+            --output "$RESPONSE_FILE" \
+            --write-out "%{http_code}" \
+            "$IMPORT_URL")
+
+          echo "Apigee Import HTTP Status: $HTTP_STATUS"
+
+          echo ""
+          echo "========== APIGEE IMPORT RESPONSE =========="
+          cat "$RESPONSE_FILE"
+          echo ""
+          echo "============================================"
+
+          if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
+            echo "ERROR: Apigee import failed"
+            rm -f "$RESPONSE_FILE"
+            exit 1
+          fi
+          REVISION=$(jq -r '.revision // empty' "$RESPONSE_FILE")
+          if [ -z "$REVISION" ]; then
+            echo "ERROR: Revision was not returned by Apigee"
+            rm -f "$RESPONSE_FILE"
+            exit 1
+          fi
+
+          rm -f "$RESPONSE_FILE"
+          echo ""
+          echo "New Apigee revision: $REVISION"
+          echo "revision=$REVISION" >> "$GITHUB_OUTPUT"
+
+      - name: End Apigee Import
+        if: always()
+        run: echo "::endgroup::"
+
+
+      # ============================================================
+      # DEPLOY IMPORTED REVISION
+      # ============================================================
+
+      - name: Start Apigee Deployment
+        run: echo "::group::Apigee Deployment"
+
+      - name: Deploy Imported Revision
+        id: deploy
+        shell: bash
+        env:
+          ACCESS_TOKEN: ${{ steps.token.outputs.access_token }}
+          REVISION: ${{ steps.import.outputs.revision }}
+        run: |
+          set -euo pipefail
+
+          RESOURCE_TYPE="${{ inputs.resourcetype }}"
+
+          DEPLOY_URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/${RESOURCE_TYPE}/${{ inputs.deploy_proxy }}/revisions/${REVISION}/deployments?override=true"
+
+          RESPONSE_FILE=$(mktemp)
+
+          echo "=========================================="
+          echo "APIGEE DEPLOYMENT"
+          echo "=========================================="
+          echo "Operation    : ${{ inputs.operation }}"
+          echo "Environment  : ${{ inputs.apigee_env }}"
+          echo "Proxy        : ${{ inputs.deploy_proxy }}"
+          echo "Nexus Version: ${{ inputs.nexus_version }}"
+          echo "Revision     : $REVISION"
+          echo "=========================================="
+
+          HTTP_STATUS=$(curl \
+            --silent \
+            --show-error \
+            --location \
+            --request POST \
+            --header "Authorization: Bearer $ACCESS_TOKEN" \
+            --output "$RESPONSE_FILE" \
+            --write-out "%{http_code}" \
+            "$DEPLOY_URL")
+
+          echo "Deployment HTTP Status: $HTTP_STATUS"
+
+          echo ""
+          echo "========== DEPLOYMENT RESPONSE =========="
+          cat "$RESPONSE_FILE"
+          echo ""
+          echo "========================================="
+
+          if [[ "$HTTP_STATUS" -lt 200 || "$HTTP_STATUS" -ge 300 ]]; then
+            echo "ERROR: Apigee deployment failed"
+            rm -f "$RESPONSE_FILE"
+            exit 1
+          fi
+
+          rm -f "$RESPONSE_FILE"
+
+          echo "Deployment request successful"
+
+      - name: End Apigee Deployment
+        if: always()
+        run: echo "::endgroup::"
+
+
+      # ============================================================
+      # VERIFY DEPLOYMENT
+      # ============================================================
+
+      - name: Start Deployment Verification
+        run: echo "::group::Deployment Verification"
+
+      - name: Verify Deployment
+        shell: bash
+        env:
+          ACCESS_TOKEN: ${{ steps.token.outputs.access_token }}
+          REVISION: ${{ steps.import.outputs.revision }}
+        run: |
+          set -euo pipefail
+          RESOURCE_TYPE="${{ inputs.resourcetype }}"
+          VERIFY_URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/${RESOURCE_TYPE}/${{ inputs.deploy_proxy }}/revisions/${REVISION}/deployments"
+          echo "Waiting for Apigee deployment to become ready..."
+          for ATTEMPT in $(seq 1 20); do
+            RESPONSE=$(curl \
+              --silent \
+              --show-error \
+              --location \
+              --header "Authorization: Bearer $ACCESS_TOKEN" \
+              "$VERIFY_URL")
+
+            echo ""
+            echo "Attempt: $ATTEMPT"
+            echo "$RESPONSE"
+
+            STATE=$(echo "$RESPONSE" | jq -r '.state // empty')
+            if [ "$STATE" = "READY" ]; then
+              echo ""
+              echo "Deployment is READY"
+              exit 0
+            fi
+
+            if [ "$STATE" = "ERROR" ]; then
+              echo "ERROR: Deployment entered ERROR state"
+              exit 1
+            fi
+            sleep 10
+          done
+
+          echo ""
+          echo "ERROR: Deployment did not reach READY state"
+          exit 1
+
+      - name: End Deployment Verification
+        if: always()
+        run: echo "::endgroup::"
+
+
+      # ============================================================
+      # RELEASE SUMMARY
+      # ============================================================
+      - name: Deployment Summary
+        if: success()
+        shell: bash
+        run: |
+          echo "## Apigee ${{ inputs.operation }} Successful" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Operation | ${{ inputs.operation }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Apigee Org | ${{ inputs.apigee_org }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Environment | ${{ inputs.apigee_env }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Resource Type | ${{ inputs.resourcetype }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Proxy / Shared Flow | ${{ inputs.deploy_proxy }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Nexus Version | ${{ inputs.nexus_version }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Apigee Revision | ${{ steps.import.outputs.revision }} |" >> "$GITHUB_STEP_SUMMARY"
