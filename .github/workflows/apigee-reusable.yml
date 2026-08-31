@@ -69,23 +69,15 @@ on:
 
 permissions:
   contents: read
-
-
 # =========================================================
 # GLOBAL ENV
 # =========================================================
-
 env:
-
   RESOURCE_TYPE: ${{ inputs.resourcetype }}
-
   BUNDLE_DIR: ${{ inputs.resourcetype == 'apis' && 'apiproxy' || 'sharedflowbundle' }}
-
-
 # =========================================================
 # JOB
 # =========================================================
-
 jobs:
   build-lint-deploy:
     runs-on: ubuntu-latest
@@ -257,7 +249,7 @@ jobs:
           # ------------------------------------------------
           NEXUS_URL=$(jq -r '.pipelineConfig.artifactToolConfigs.nexus.NEXUS_URL' apigee-config.json)
           NEXUS_USERNAME=$(jq -r '.pipelineConfig.artifactToolConfigs.nexus.NEXUS_USERNAME' apigee-config.json)
-          NEXUS_PASSWORD=$(jq -r '.pipelineConfig.artifactToolConfigs..nexus.NEXUS_PASSWORD' apigee-config.json)
+          NEXUS_PASSWORD=$(jq -r '.pipelineConfig.artifactToolConfigs.nexus.NEXUS_PASSWORD' apigee-config.json)
           NEXUS_REPOSITORY=$(jq -r '.pipelineConfig.artifactToolConfigs.nexus.NEXUS_REPOSITORY' apigee-config.json)
           # ------------------------------------------------
           # MASK SECRETS
@@ -293,8 +285,6 @@ jobs:
       - name: End group ForgeSphere Configuration
         if: always()
         run: echo "::endgroup::"
-
-
       # ===================================================
       # OPTIONAL GITHUB APP TOKEN
       # ===================================================
@@ -332,7 +322,6 @@ jobs:
           ref: develop
           path: apigee-linting-custom
           token: ${{ steps.token-select.outputs.token }}
-
 
       - name: Apigee Lint
         continue-on-error: true
@@ -421,7 +410,6 @@ jobs:
         if: always()
         run: echo "::endgroup::"
 
-
       # ===================================================
       # NEXUS PUSH
       # ===================================================
@@ -452,7 +440,7 @@ jobs:
           echo "========================================"
           echo "NEXUS UPLOAD"
           echo "========================================"
-          echo "Host : $NEXUS_URL"
+          echo "Host : $UPLOAD_URL - ${NEXUS_URL%/}"
           echo "Repository : $NEXUS_REPOSITORY"
           echo "Artifact   : $ARTIFACT_NAME"
           echo "Version    : $VERSION"
