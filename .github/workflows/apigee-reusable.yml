@@ -231,7 +231,6 @@ jobs:
           # ------------------------------------------------
           # SONAR CONFIGURATION
           # ------------------------------------------------
-          cat apigee-config.json
           SONAR_HOST_URL=$(jq -r '.pipelineConfig.securityToolConfigs.sonarscanner.SONAR_HOST_URL' apigee-config.json)
           SONAR_TOKEN=$(jq -r '.pipelineConfig.securityToolConfigs.sonarscanner.SONAR_TOKEN' apigee-config.json)
           SONAR_PROJECT_KEY=${{ inputs.deploy_proxy }}
