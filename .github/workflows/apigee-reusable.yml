@@ -204,8 +204,7 @@ jobs:
             strategies: .strategies,
             pipelineConfig: .pipelineConfigs.APIGEE_PROXY
           }' cicd-config.json > apigee-config.json
-          cat apigee-config.json
-          
+                    
           echo "APIGEE_PROXY: $APIGEE_PROXY"
           # ------------------------------------------------
           # BRANCH STRATEGY
