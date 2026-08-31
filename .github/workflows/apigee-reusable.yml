@@ -425,7 +425,7 @@ jobs:
           NEXUS_USERNAME: ${{ steps.config.outputs.nexus_username }}
           NEXUS_PASSWORD: ${{ steps.config.outputs.nexus_password }}
         run: |
-          #set -euo pipefail
+          set -euo pipefail
           ARTIFACT_NAME="${{ inputs.deploy_proxy }}.zip"
           VERSION="${{ steps.version.outputs.version }}"
           if [ ! -f "$ARTIFACT_NAME" ]; then
