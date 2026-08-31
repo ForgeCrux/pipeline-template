@@ -227,9 +227,11 @@ jobs:
             echo "ERROR: merge branch not configured"
             exit 1
           fi
+          
           # ------------------------------------------------
           # SONAR CONFIGURATION
           # ------------------------------------------------
+          cat apigee-config.json
           SONAR_HOST_URL=$(jq -r '
             .securityToolConfigs.sonarscanner.SONAR_HOST_URL
           ' apigee-config.json)
