@@ -87,130 +87,86 @@ env:
 # =========================================================
 
 jobs:
-
   build-lint-deploy:
-
     runs-on: ubuntu-latest
-
     timeout-minutes: 30
-
     steps:
-
-
       # ===================================================
       # SETUP
       # ===================================================
-
       - name: Start group Setup
         run: echo "::group::Setup"
-
-
       # ---------------------------------------------------
       # CHECKOUT
       # ---------------------------------------------------
-
       - name: Checkout repository
         uses: actions/checkout@v4
-
-
       # ---------------------------------------------------
       # NODE
       # ---------------------------------------------------
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node_version }}
-
-
       # ---------------------------------------------------
       # TOOLS
       # ---------------------------------------------------
-
       - name: Install tools
         run: |
           sudo apt-get update
           sudo apt-get install -y jq unzip
-
-
       # ---------------------------------------------------
       # GITHUB AUTH
       # ---------------------------------------------------
-
       - name: Force GitHub auth
         run: |
           git config --global \
             url."https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/".insteadOf \
             "https://github.com/"
 
-
       - name: End group Setup
         if: always()
         run: echo "::endgroup::"
-
-
       # ===================================================
       # VALIDATION
       # ===================================================
-
       - name: Start group Validation
         run: echo "::group::Validation"
 
-
       - name: Validate Resource Type
         run: |
-
           set -euo pipefail
-
           if [[ "${{ inputs.resourcetype }}" != "apis" &&
                 "${{ inputs.resourcetype }}" != "sharedflows" ]]; then
-
             echo "Invalid resourcetype: ${{ inputs.resourcetype }}"
-
             exit 1
-
           fi
-
-
       # ---------------------------------------------------
       # VALIDATE RELEASE PROPERTIES
       # ---------------------------------------------------
 
       - name: Validate release.properties
         run: |
-
           set -euo pipefail
-
           if [ ! -f release.properties ]; then
             echo "ERROR: release.properties not found"
             exit 1
           fi
-
           if ! grep -q '^version=' release.properties; then
-
             echo "ERROR: version property not found"
-
             exit 1
-
           fi
-
           BASE_VERSION=$(grep '^version=' release.properties | cut -d'=' -f2)
-
           echo "Base version: $BASE_VERSION"
-
 
       - name: End group Validation
         if: always()
         run: echo "::endgroup::"
-
-
       # ===================================================
       # FORGESPHERE CONFIGURATION
       # ===================================================
-
       - name: Start group ForgeSphere Configuration
         run: echo "::group::ForgeSphere Configuration"
-
 
       - name: Load ForgeSphere CI/CD Configuration
         id: config
@@ -218,12 +174,11 @@ jobs:
         env:
           CICD_CONFIG_URL: ${{ inputs.cicd_config_url }}
           CICD_CONFIG_ID: ${{ inputs.cicd_config_id }}
-
         run: |
           set -euo pipefail
           CONFIG_URL="${CICD_CONFIG_URL%/}/${CICD_CONFIG_ID}/all?filtered=true"
           echo "Fetching ForgeSphere CI/CD configuration... ${CONFIG_URL}"
-
+          APIGEE_PROXY="${APIGEE_PROXY:-}"
           HTTP_STATUS=$(curl \
             --silent \
             --show-error \
@@ -237,13 +192,11 @@ jobs:
             echo "HTTP status: $HTTP_STATUS"
             exit 1
           fi
-
-
           if [ ! -s cicd-config.json ]; then
             echo "ERROR: Empty CI/CD configuration"
             exit 1
           fi
-          
+        
           jq empty cicd-config.json
 
           # Extract only APIGEE_PROXY configuration
@@ -252,7 +205,7 @@ jobs:
             pipelineConfig: .pipelineConfigs.APIGEE_PROXY
           }' cicd-config.json > apigee-config.json
           cat apigee-config.json
-
+          
           echo "APIGEE_PROXY: $APIGEE_PROXY"
           # ------------------------------------------------
           # BRANCH STRATEGY
@@ -271,20 +224,13 @@ jobs:
             | .tag
           ' apigee-config.json | head -n 1)
 
-
           if [ -z "$MERGE_BRANCH" ] || [ "$MERGE_BRANCH" = "null" ]; then
-
             echo "ERROR: merge branch not configured"
-
             exit 1
-
           fi
-
-
           # ------------------------------------------------
           # SONAR CONFIGURATION
           # ------------------------------------------------
-
           SONAR_HOST_URL=$(jq -r '
             .securityToolConfigs.sonarscanner.SONAR_HOST_URL
           ' apigee-config.json)
