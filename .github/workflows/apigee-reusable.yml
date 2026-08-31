@@ -255,18 +255,10 @@ jobs:
           # ------------------------------------------------
           # NEXUS CONFIGURATION
           # ------------------------------------------------
-          NEXUS_URL=$(jq -r '
-            .artifactToolConfigs.nexus.NEXUS_URL
-          ' apigee-config.json)
-          NEXUS_USERNAME=$(jq -r '
-            .artifactToolConfigs.nexus.NEXUS_USERNAME
-          ' apigee-config.json)
-          NEXUS_PASSWORD=$(jq -r '
-            .artifactToolConfigs.nexus.NEXUS_PASSWORD
-          ' apigee-config.json)
-          NEXUS_REPOSITORY=$(jq -r '
-            .artifactToolConfigs.nexus.NEXUS_REPOSITORY
-          ' apigee-config.json)
+          NEXUS_URL=$(jq -r '.pipelineConfig.artifactToolConfigs.nexus.NEXUS_URL' apigee-config.json)
+          NEXUS_USERNAME=$(jq -r '.pipelineConfig.artifactToolConfigs.nexus.NEXUS_USERNAME' apigee-config.json)
+          NEXUS_PASSWORD=$(jq -r '.pipelineConfig.artifactToolConfigs..nexus.NEXUS_PASSWORD' apigee-config.json)
+          NEXUS_REPOSITORY=$(jq -r '.pipelineConfig.artifactToolConfigs.nexus.NEXUS_REPOSITORY' apigee-config.json)
           # ------------------------------------------------
           # MASK SECRETS
           # ------------------------------------------------
@@ -433,10 +425,8 @@ jobs:
       # ===================================================
       # NEXUS PUSH
       # ===================================================
-
       - name: Start group Nexus Push
         run: echo "::group::Nexus Push"
-
 
       - name: Push Package to Nexus
         if: steps.config.outputs.nexus_url != ''
@@ -447,7 +437,7 @@ jobs:
           NEXUS_USERNAME: ${{ steps.config.outputs.nexus_username }}
           NEXUS_PASSWORD: ${{ steps.config.outputs.nexus_password }}
         run: |
-          set -euo pipefail
+          #set -euo pipefail
           ARTIFACT_NAME="${{ inputs.deploy_proxy }}.zip"
           VERSION="${{ steps.version.outputs.version }}"
           if [ ! -f "$ARTIFACT_NAME" ]; then
