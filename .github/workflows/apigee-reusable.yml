@@ -234,7 +234,7 @@ jobs:
           cat apigee-config.json
           SONAR_HOST_URL=$(jq -r '.pipelineConfig.securityToolConfigs.sonarscanner.SONAR_HOST_URL' apigee-config.json)
           SONAR_TOKEN=$(jq -r '.pipelineConfig.securityToolConfigs.sonarscanner.SONAR_TOKEN' apigee-config.json)
-          SONAR_PROJECT_KEY=$(jq -r '.pipelineConfig.securityToolConfigs.sonarscanner.SONAR_PROJECT_KEY' apigee-config.json)
+          SONAR_PROJECT_KEY=${{ inputs.deploy_proxy }}
           # ------------------------------------------------
           # VALIDATE SONAR
           # ------------------------------------------------
@@ -321,27 +321,17 @@ jobs:
         id: token-select
         shell: bash
         run: |
-
           TOKEN="${{ steps.app-token.outputs.token }}"
-
           if [ -n "$TOKEN" ]; then
-
             echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
-
           else
-
             echo "token=${{ secrets.GH_TOKEN }}" >> "$GITHUB_OUTPUT"
-
           fi
-
-
       # ===================================================
       # LINT
       # ===================================================
-
       - name: Start group Lint
         run: echo "::group::Lint"
-
 
       - name: Checkout lint rules
         continue-on-error: true
@@ -356,151 +346,86 @@ jobs:
       - name: Apigee Lint
         continue-on-error: true
         run: |
-
           if [ -d "./apigee-linting-custom" ]; then
-
             npx apigeelint \
               -s "$BUNDLE_DIR" \
               -x ./apigee-linting-custom/rules \
               -f table.js || true
-
           else
-
             echo "Skipping Apigee lint"
-
           fi
-
-
       - name: JS Lint
         continue-on-error: true
         run: |
-
           npx jslint "$BUNDLE_DIR"/**/*.js || true
-
 
       # ===================================================
       # SONAR
       # ===================================================
-
       - name: Sonar Scan
         continue-on-error: true
         env:
-
           SONAR_HOST_URL: ${{ steps.config.outputs.sonar_host_url }}
-
           SONAR_TOKEN: ${{ steps.config.outputs.sonar_token }}
-
           SONAR_PROJECT_KEY: ${{ steps.config.outputs.sonar_project_key }}
-
         run: |
-
           set -euo pipefail
-
-          echo "Running SonarQube scan"
-
-          npx sonarqube-scanner \
+          echo "Running SonarQube scan"          npx sonarqube-scanner \
             -Dsonar.host.url="$SONAR_HOST_URL" \
             -Dsonar.token="$SONAR_TOKEN" \
             -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
             -Dsonar.sources="$BUNDLE_DIR"
 
-
       - name: End group Lint
         if: always()
         run: echo "::endgroup::"
-
-
       # ===================================================
       # VERSION
       # ===================================================
-
       - name: Calculate Version
         id: version
         shell: bash
         env:
           INPUT_VERSION: ${{ inputs.version }}
-
         run: |
-
           set -euo pipefail
-
           if [ -n "$INPUT_VERSION" ]; then
-
             VERSION="$INPUT_VERSION"
-
           else
-
             BASE_VERSION=$(grep '^version=' release.properties | cut -d'=' -f2)
-
             SHORT_SHA=$(git rev-parse --short HEAD)
-
             VERSION="${BASE_VERSION}-${SHORT_SHA}"
-
           fi
-
-
           echo "Version: $VERSION"
-
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-
       # ===================================================
       # PACKAGE
       # ===================================================
-
       - name: Start group Package
         run: echo "::group::Package"
-
 
       - name: Package Proxy
         shell: bash
         run: |
-
           set -euo pipefail
-
           if [ "${{ inputs.resourcetype }}" = "apis" ]; then
-
             ZIP_FILE="proxy.zip"
-
           else
-
             ZIP_FILE="sharedflowbundle.zip"
-
           fi
-
-
           echo "RESOURCE_TYPE=$RESOURCE_TYPE"
-
           echo "BUNDLE_DIR=$BUNDLE_DIR"
-
           echo "ZIP_FILE=$ZIP_FILE"
-
-
           test -d "$BUNDLE_DIR"
-
-
           zip -r "$ZIP_FILE" "$BUNDLE_DIR"
-
-
           ARTIFACT_NAME="${{ inputs.deploy_proxy }}.zip"
-
           cp "$ZIP_FILE" "$ARTIFACT_NAME"
-
-
           echo "========================================"
-
           echo "ZIP CREATED"
-
           echo "Artifact: $ARTIFACT_NAME"
-
           echo "Version : ${{ steps.version.outputs.version }}"
-
           echo "========================================"
-
-
           ls -lh "$ZIP_FILE" "$ARTIFACT_NAME"
-
-
       - name: End group Package
         if: always()
         run: echo "::endgroup::"
