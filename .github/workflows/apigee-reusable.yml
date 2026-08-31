@@ -443,61 +443,31 @@ jobs:
         if: steps.config.outputs.nexus_url != ''
         shell: bash
         env:
-
           NEXUS_URL: ${{ steps.config.outputs.nexus_url }}
-
           NEXUS_REPOSITORY: ${{ steps.config.outputs.nexus_repository }}
-
           NEXUS_USERNAME: ${{ steps.config.outputs.nexus_username }}
-
           NEXUS_PASSWORD: ${{ steps.config.outputs.nexus_password }}
-
         run: |
-
           set -euo pipefail
-
-
           ARTIFACT_NAME="${{ inputs.deploy_proxy }}.zip"
-
           VERSION="${{ steps.version.outputs.version }}"
-
-
           if [ ! -f "$ARTIFACT_NAME" ]; then
-
             echo "ERROR: Package not found: $ARTIFACT_NAME"
-
             exit 1
-
           fi
-
-
           if [ -z "$NEXUS_REPOSITORY" ]; then
-
             echo "ERROR: Nexus repository not configured"
-
             exit 1
-
           fi
-
-
           UPLOAD_URL="${NEXUS_URL%/}/repository/${NEXUS_REPOSITORY}/${{ inputs.deploy_proxy }}/${VERSION}/${ARTIFACT_NAME}"
-
-
           echo "========================================"
-
           echo "NEXUS UPLOAD"
-
           echo "========================================"
-
+          echo "Host : $NEXUS_URL"
           echo "Repository : $NEXUS_REPOSITORY"
-
           echo "Artifact   : $ARTIFACT_NAME"
-
           echo "Version    : $VERSION"
-
           echo "========================================"
-
-
           curl \
             --fail \
             --show-error \
@@ -505,116 +475,73 @@ jobs:
             --user "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" \
             --upload-file "$ARTIFACT_NAME" \
             "$UPLOAD_URL"
-
-
           echo "Nexus upload successful"
-
 
       - name: Nexus not configured
         if: steps.config.outputs.nexus_url == ''
         run: |
-
           echo "Nexus configuration not available from ForgeSphere"
-
           echo "Skipping Nexus upload"
-
 
       - name: End group Nexus Push
         if: always()
         run: echo "::endgroup::"
-
-
       # ===================================================
       # TOKEN SERVICE AUTH
       # ===================================================
-
       - name: Start group Token auth
         run: echo "::group::Token auth"
-
 
       - name: Get Access Token
         id: token
         run: |
-
           set -euo pipefail
-
           RESPONSE=$(curl \
             -s \
             -w "\nHTTP_STATUS:%{http_code}\n" \
             https://token-service-113875395623.us-central1.run.app/token)
 
-
           STATUS=$(echo "$RESPONSE" |
             grep HTTP_STATUS |
             cut -d':' -f2)
 
-
           if [ "$STATUS" -ne 200 ]; then
-
             echo "Failed to fetch token"
-
             exit 1
-
           fi
-
 
           ACCESS_TOKEN=$(echo "$RESPONSE" |
             head -n 1 |
             jq -r '.access_token')
 
-
           if [ -z "$ACCESS_TOKEN" ] ||
              [ "$ACCESS_TOKEN" = "null" ]; then
-
             echo "Invalid token"
-
             exit 1
-
           fi
-
-
           echo "::add-mask::$ACCESS_TOKEN"
-
           echo "access_token=$ACCESS_TOKEN" >> "$GITHUB_OUTPUT"
-
-
+          
       - name: End group Token auth
         if: always()
         run: echo "::endgroup::"
-
-
       # ===================================================
       # IMPORT
       # ===================================================
-
       - name: Start group Import
         run: echo "::group::Import"
-
 
       - name: Import Proxy
         shell: bash
         run: |
-
           set -euo pipefail
-
-
           if [ "${{ inputs.resourcetype }}" = "apis" ]; then
-
             ZIP_FILE="proxy.zip"
-
           else
-
             ZIP_FILE="sharedflowbundle.zip"
-
           fi
-
-
           URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/${{ inputs.resourcetype }}?action=import&name=${{ inputs.deploy_proxy }}"
-
-
           TOKEN="${{ steps.token.outputs.access_token }}"
-
-
           RESPONSE=$(curl \
             --silent \
             --show-error \
@@ -624,31 +551,19 @@ jobs:
             -F "file=@$ZIP_FILE" \
             "$URL")
 
-
           STATUS=$(echo "$RESPONSE" |
             grep HTTP_STATUS |
             cut -d':' -f2)
-
-
           if [ "$STATUS" -ne 200 ]; then
-
             echo "Import failed"
-
             echo "$RESPONSE"
-
             exit 1
-
           fi
-
-
           echo "Import successful"
-
 
       - name: End group Import
         if: always()
         run: echo "::endgroup::"
-
-
       # ===================================================
       # GET REVISION
       # ===================================================
