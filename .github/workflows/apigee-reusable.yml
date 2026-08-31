@@ -232,25 +232,17 @@ jobs:
           # SONAR CONFIGURATION
           # ------------------------------------------------
           cat apigee-config.json
-          SONAR_HOST_URL=$(jq -r '
-            .securityToolConfigs.sonarscanner.SONAR_HOST_URL
-          ' apigee-config.json)
-          SONAR_TOKEN=$(jq -r '
-            .securityToolConfigs.sonarscanner.SONAR_TOKEN
-          ' apigee-config.json)
-          SONAR_PROJECT_KEY=$(jq -r '
-            .securityToolConfigs.sonarscanner.SONAR_PROJECT_KEY
-          ' apigee-config.json)
+          SONAR_HOST_URL=$(jq -r '.pipelineConfig.securityToolConfigs.sonarscanner.SONAR_HOST_URL' apigee-config.json)
+          SONAR_TOKEN=$(jq -r '.pipelineConfig.securityToolConfigs.sonarscanner.SONAR_TOKEN' apigee-config.json)
+          SONAR_PROJECT_KEY=$(jq -r '.pipelineConfig.securityToolConfigs.sonarscanner.SONAR_PROJECT_KEY' apigee-config.json)
           # ------------------------------------------------
           # VALIDATE SONAR
           # ------------------------------------------------
-
           if [ -z "$SONAR_HOST_URL" ] ||
              [ "$SONAR_HOST_URL" = "null" ]; then
             echo "ERROR: SONAR_HOST_URL not configured"
             exit 1
           fi
-
           if [ -z "$SONAR_TOKEN" ] ||
              [ "$SONAR_TOKEN" = "null" ]; then
             echo "ERROR: SONAR_TOKEN not configured"
