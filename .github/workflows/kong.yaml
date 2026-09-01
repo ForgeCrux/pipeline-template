@@ -18,12 +18,39 @@ on:
       deck_version:
         required: false
         type: string
-        default: "1.43.0"
+        default: "1.62.1"
 
       validate_only:
         required: false
         type: boolean
         default: false
+
+      # decK command used to push config: "apply" adds/updates and never deletes.
+      # "sync" makes Kong exactly match the file and deletes anything not present.
+      deck_mode:
+        required: false
+        type: string
+        default: apply
+
+      # Konnect API region/address. The migration bundle passes the control plane's
+      # actual region, for example https://in.api.konghq.com. Defaults to US.
+      konnect_addr:
+        required: false
+        type: string
+        default: https://us.api.konghq.com
+
+      # Tag used to dump back only the migrated entities after apply.
+      select_tag:
+        required: false
+        type: string
+        default: migrated-by:forgeshift-wso2-migrator
+
+      # Optional: when set, POST the apply report and dump back to the migration
+      # service so it can rebuild entity_mappings.
+      result_callback_url:
+        required: false
+        type: string
+        default: ""
 
     secrets:
       konnect_token:
@@ -39,6 +66,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
+        id: checkout
         uses: actions/checkout@v4
 
       #######################################################
@@ -46,45 +74,163 @@ jobs:
       #######################################################
 
       - name: Install decK
+        id: install_deck
         run: |
-          curl -sL https://github.com/kong/deck/releases/download/v${{ inputs.deck_version }}/deck_${{ inputs.deck_version }}_linux_amd64.tar.gz -o deck.tar.gz
-
-          tar -xzf deck.tar.gz
-
-          sudo mv deck /usr/local/bin/deck
-
-          deck version
+          set -o pipefail
+          {
+            curl -sL https://github.com/kong/deck/releases/download/v${{ inputs.deck_version }}/deck_${{ inputs.deck_version }}_linux_amd64.tar.gz -o deck.tar.gz &&
+            tar -xzf deck.tar.gz &&
+            sudo mv deck /usr/local/bin/deck &&
+            deck version
+          } 2>&1 | tee deck-install.txt
 
       #######################################################
       # Validate
       #######################################################
 
       - name: Validate Kong Configuration
+        id: validate
         run: |
+          set -o pipefail
           deck gateway validate \
             --konnect-token "${{ secrets.konnect_token }}" \
+            --konnect-addr "${{ inputs.konnect_addr }}" \
             --konnect-control-plane-name "${{ inputs.control_plane_name }}" \
-            "${{ inputs.kong_config_path }}"
+            "${{ inputs.kong_config_path }}" 2>&1 | tee validate-out.txt
 
       #######################################################
-      # Diff
+      # Diff (informational - shows sync-style changes, including deletes apply won't do)
       #######################################################
 
       - name: Diff Kong Configuration
         run: |
           deck gateway diff \
             --konnect-token "${{ secrets.konnect_token }}" \
+            --konnect-addr "${{ inputs.konnect_addr }}" \
             --konnect-control-plane-name "${{ inputs.control_plane_name }}" \
-            "${{ inputs.kong_config_path }}"
+            "${{ inputs.kong_config_path }}" || true
 
       #######################################################
-      # Sync
+      # Deploy: deck gateway apply by default, or sync when explicitly requested
       #######################################################
 
-      - name: Sync Kong Configuration
+      - name: Deploy Kong Configuration (${{ inputs.deck_mode }})
+        id: deploy
         if: ${{ inputs.validate_only == false }}
+        continue-on-error: true
+        env:
+          DECK_MODE: ${{ inputs.deck_mode }}
         run: |
-          deck gateway sync \
+          case "$DECK_MODE" in
+            apply|sync) ;;
+            *)
+              echo "Invalid deck_mode '$DECK_MODE'. Allowed values: apply, sync" >&2
+              exit 1
+              ;;
+          esac
+
+          set +e
+          deck gateway "$DECK_MODE" \
             --konnect-token "${{ secrets.konnect_token }}" \
+            --konnect-addr "${{ inputs.konnect_addr }}" \
             --konnect-control-plane-name "${{ inputs.control_plane_name }}" \
-            "${{ inputs.kong_config_path }}"
+            --json-output \
+            "${{ inputs.kong_config_path }}" > apply-report.json 2> apply-stderr.txt
+          deck_exit=$?
+          cat apply-report.json apply-stderr.txt
+          exit "$deck_exit"
+
+      #######################################################
+      # Capture deployed state for the migrated entities only
+      #######################################################
+
+      - name: Dump deployed state by tag
+        id: dump
+        if: ${{ inputs.validate_only == false }}
+        continue-on-error: true
+        run: |
+          deck gateway dump \
+            --konnect-token "${{ secrets.konnect_token }}" \
+            --konnect-addr "${{ inputs.konnect_addr }}" \
+            --konnect-control-plane-name "${{ inputs.control_plane_name }}" \
+            --select-tag "${{ inputs.select_tag }}" \
+            --format json \
+            -o kong-state.json
+          cat kong-state.json
+
+      #######################################################
+      # Always report success or failure so migration jobs do not wait forever.
+      #######################################################
+
+      - name: Report result to migration service
+        id: report
+        if: ${{ always() && inputs.validate_only == false && inputs.result_callback_url != '' }}
+        env:
+          OUT_CHECKOUT: ${{ steps.checkout.outcome }}
+          OUT_INSTALL: ${{ steps.install_deck.outcome }}
+          OUT_VALIDATE: ${{ steps.validate.outcome }}
+          OUT_DEPLOY: ${{ steps.deploy.outcome }}
+          OUT_DUMP: ${{ steps.dump.outcome }}
+          JOB_STATUS: ${{ job.status }}
+          DECK_MODE: ${{ inputs.deck_mode }}
+        run: |
+          # Tolerate empty or non-JSON outputs left by a hard failure.
+          ( [ -s apply-report.json ] && jq -e . apply-report.json >/dev/null 2>&1 ) || echo '{}' > apply-report.json
+          ( [ -s kong-state.json ] && jq -e . kong-state.json >/dev/null 2>&1 ) || echo '{}' > kong-state.json
+
+          # Which gating step failed first? Dump is post-apply/non-fatal.
+          FAILED_STEP=""
+          for pair in "Checkout:$OUT_CHECKOUT" "Install decK:$OUT_INSTALL" "Validate:$OUT_VALIDATE" "Deploy ($DECK_MODE):$OUT_DEPLOY"; do
+            name="${pair%%:*}"; outcome="${pair##*:}"
+            if [ "$outcome" = "failure" ] && [ -z "$FAILED_STEP" ]; then FAILED_STEP="$name"; fi
+          done
+
+          # Build diagnostics with headline, step table, and captured logs.
+          : > combined-stderr.txt
+          if [ -n "$FAILED_STEP" ]; then echo "Pipeline FAILED at step: $FAILED_STEP" >> combined-stderr.txt; fi
+          echo "Step outcomes - checkout=$OUT_CHECKOUT install=$OUT_INSTALL validate=$OUT_VALIDATE deploy=$OUT_DEPLOY dump=$OUT_DUMP (job=$JOB_STATUS)" >> combined-stderr.txt
+          echo "" >> combined-stderr.txt
+          for pair in "Install decK:deck-install.txt" "Validate:validate-out.txt" "Apply:apply-stderr.txt"; do
+            label="${pair%%:*}"; file="${pair##*:}"
+            if [ -s "$file" ]; then { echo "----- $label -----"; cat "$file"; echo ""; } >> combined-stderr.txt; fi
+          done
+
+          # Failed if any gating step failed. The deploy step uses continue-on-error
+          # so the callback can still mark the migration job failed.
+          APPLY_EXIT="${{ (job.status == 'failure' || steps.deploy.outcome == 'failure') && '1' || '0' }}"
+
+          # Read JSON files from disk. Inlining a full deck dump into jq's argv can
+          # exceed ARG_MAX.
+          jq -n \
+            --slurpfile state kong-state.json \
+            --slurpfile report apply-report.json \
+            --argjson exit "$APPLY_EXIT" \
+            --rawfile stderr combined-stderr.txt \
+            '{kongState: $state[0], applyReport: $report[0], applyExitCode: $exit, applyStderr: $stderr}' > deck-result.json
+          echo "=== reporting back (exit=$APPLY_EXIT, step=$FAILED_STEP) ==="; cat combined-stderr.txt
+          curl -sS -X POST "${{ inputs.result_callback_url }}" \
+            -H "Content-Type: application/json" \
+            --data @deck-result.json || echo "callback POST failed (non-fatal)"
+
+      - name: Upload decK result artifacts
+        if: ${{ always() && inputs.validate_only == false }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: deck-result
+          path: |
+            apply-report.json
+            kong-state.json
+            apply-stderr.txt
+            validate-out.txt
+            deck-install.txt
+            combined-stderr.txt
+            deck-result.json
+          if-no-files-found: warn
+
+      - name: Fail if deploy reported errors
+        if: ${{ always() && inputs.validate_only == false && steps.deploy.outcome == 'failure' }}
+        env:
+          DECK_MODE: ${{ inputs.deck_mode }}
+        run: |
+          echo "deck gateway $DECK_MODE failed - see apply-report.json, the deck-result artifact, or the migration job."
+          exit 1
