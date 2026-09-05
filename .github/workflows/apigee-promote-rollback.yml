@@ -1,7 +1,59 @@
 name: Reusable Apigee Promote / Rollback
 
 on:
+  # Allows REST API / GitHub UI execution
   workflow_dispatch:
+    inputs:
+      operation:
+        description: "Deployment operation: promote or rollback"
+        required: true
+        type: choice
+        options:
+          - promote
+          - rollback
+
+      apigee_org:
+        description: "Target Apigee X organization"
+        required: true
+        type: string
+
+      apigee_env:
+        description: "Target Apigee X environment"
+        required: true
+        type: string
+
+      deploy_proxy:
+        description: "API Proxy or Shared Flow name"
+        required: true
+        type: string
+
+      resourcetype:
+        description: "Apigee resource type"
+        required: true
+        type: choice
+        options:
+          - apis
+          - sharedflows
+
+      nexus_version:
+        description: "Exact Nexus version to promote or rollback"
+        required: true
+        type: string
+
+      nexus_artifact_name:
+        description: "Optional Nexus artifact filename"
+        required: false
+        default: ""
+        type: string
+
+      token_service_url:
+        description: "Service used to obtain Apigee OAuth access token"
+        required: false
+        default: "https://token-service-113875395623.us-central1.run.app/token"
+        type: string
+
+  # Allows other GitHub Actions workflows to call this workflow
+  workflow_call:
     inputs:
       operation:
         description: "Deployment operation: promote or rollback"
@@ -36,51 +88,7 @@ on:
       nexus_artifact_name:
         description: "Optional Nexus artifact filename"
         required: false
-        default: ''
-        type: string
-
-      token_service_url:
-        description: "Service used to obtain Apigee OAuth access token"
-        required: false
-        default: "https://token-service-113875395623.us-central1.run.app/token"
-        type: string
-
-  workflow_call:
-     inputs:
-      operation:
-        description: "Deployment operation: promote or rollback"
-        required: true
-        type: string
-
-      apigee_org:
-        description: "Target Apigee X organization"
-        required: true
-        type: string
-
-      apigee_env:
-        description: "Target Apigee X environment"
-        required: true
-        type: string
-
-      deploy_proxy:
-        description: "API Proxy or Shared Flow name"
-        required: true
-        type: string
-
-      resourcetype:
-        description: "apis or sharedflows"
-        required: true
-        type: string
-
-      nexus_version:
-        description: "Exact Nexus version to promote or rollback"
-        required: true
-        type: string
-
-      nexus_artifact_name:
-        description: "Optional Nexus artifact filename"
-        required: false
-        default: ''
+        default: ""
         type: string
 
       token_service_url:
@@ -98,7 +106,6 @@ on:
         required: true
       NEXUS_REPOSITORY:
         required: true
-
 
 permissions:
   contents: read
