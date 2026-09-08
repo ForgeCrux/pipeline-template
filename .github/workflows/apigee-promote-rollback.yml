@@ -52,6 +52,16 @@ on:
         default: "https://token-service-113875395623.us-central1.run.app/token"
         type: string
 
+      cicd_config_url:
+        description: "ForgeSphere CI/CD config base URL"
+        required: true
+        type: string
+
+      cicd_config_id:
+        description: "ForgeSphere CI/CD config ID"
+        required: true
+        type: string
+
   # Allows other GitHub Actions workflows to call this workflow
   workflow_call:
     inputs:
@@ -97,6 +107,16 @@ on:
         default: "https://token-service-113875395623.us-central1.run.app/token"
         type: string
 
+      cicd_config_url:
+        description: "ForgeSphere CI/CD config base URL"
+        required: true
+        type: string
+
+      cicd_config_id:
+        description: "ForgeSphere CI/CD config ID"
+        required: true
+        type: string
+
 permissions:
   contents: read
   actions: write
@@ -111,6 +131,12 @@ jobs:
     timeout-minutes: 30
 
     steps:
+
+      # ============================================================
+      # CHECKOUT (needed for the ForgeSphere config loader script)
+      # ============================================================
+      - name: Checkout
+        uses: actions/checkout@v4
 
       # ============================================================
       # VALIDATION
@@ -157,6 +183,26 @@ jobs:
       - name: End Validation
         if: always()
         run: echo "::endgroup::"
+
+      # ============================================================
+      # LOAD FORGESPHERE CI/CD CONFIGURATION
+      # ============================================================
+      - name: Start ForgeSphere Config
+        run: echo "::group::ForgeSphere Config"
+
+      - name: Load ForgeSphere CI/CD Configuration
+        id: config
+        shell: bash
+        env:
+          CICD_CONFIG_URL: ${{ inputs.cicd_config_url }}
+          CICD_CONFIG_ID: ${{ inputs.cicd_config_id }}
+          DEPLOY_PROXY: ${{ inputs.deploy_proxy }}
+        run: python3 .github/scripts/load_cicd_config.py
+
+      - name: End ForgeSphere Config
+        if: always()
+        run: echo "::endgroup::"
+
       # ============================================================
       # DOWNLOAD ARTIFACT FROM NEXUS
       # ============================================================
@@ -167,10 +213,10 @@ jobs:
         id: nexus
         shell: bash
         env:
-          NEXUS_URL: ${{ secrets.NEXUS_URL }}
-          NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
-          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
-          NEXUS_REPOSITORY: ${{ secrets.NEXUS_REPOSITORY }}
+          NEXUS_URL: ${{ steps.config.outputs.nexus_url }}
+          NEXUS_USERNAME: ${{ steps.config.outputs.nexus_username }}
+          NEXUS_PASSWORD: ${{ steps.config.outputs.nexus_password }}
+          NEXUS_REPOSITORY: ${{ steps.config.outputs.nexus_repository }}
           NEXUS_VERSION: ${{ inputs.nexus_version }}
         run: |
           set -euo pipefail
