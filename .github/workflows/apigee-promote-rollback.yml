@@ -97,16 +97,6 @@ on:
         default: "https://token-service-113875395623.us-central1.run.app/token"
         type: string
 
-    secrets:
-      NEXUS_URL:
-        required: true
-      NEXUS_USERNAME:
-        required: true
-      NEXUS_PASSWORD:
-        required: true
-      NEXUS_REPOSITORY:
-        required: true
-
 permissions:
   contents: read
   actions: write
