@@ -234,6 +234,7 @@ jobs:
           echo "=========================================="
           echo "NEXUS DOWNLOAD"
           echo "=========================================="
+          echo "Download   : $DOWNLOAD_URL"
           echo "Repository : $NEXUS_REPOSITORY"
           echo "Proxy      : ${{ inputs.deploy_proxy }}"
           echo "Version    : $NEXUS_VERSION"
