@@ -53,8 +53,8 @@ on:
         type: string
 
       cicd_config_url:
-        description: "ForgeSphere CI/CD config base URL"
-        required: true
+        required: false
+        default: 'https://forgesphere.probestack.io/cicd-automation/v1/api/cicd-config'
         type: string
 
       cicd_config_id:
