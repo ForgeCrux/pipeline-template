@@ -33,9 +33,6 @@ on:
       # =================================================
       # FORGESPHERE
       # =================================================
-      cicd_config_id:
-        required: true
-        type: string
       cicd_config_url:
         required: false
         default: 'https://forgesphere.probestack.io/cicd-automation/v1/api/cicd-config'
@@ -49,6 +46,8 @@ on:
         type: string
 
     secrets:
+      cicd_config_id:
+        required: true
       # GitHub authentication
       GH_TOKEN:
         required: true
@@ -212,7 +211,7 @@ jobs:
         shell: bash
         env:
           CICD_CONFIG_URL: ${{ inputs.cicd_config_url }}
-          CICD_CONFIG_ID: ${{ inputs.cicd_config_id }}
+          CICD_CONFIG_ID: ${{ secrets.cicd_config_id }}
           SERVICE_ACCESS_TOKEN: ${{ steps.service-token.outputs.access_token }}
           DEPLOY_PROXY: ${{ inputs.deploy_proxy }}
         run: |
