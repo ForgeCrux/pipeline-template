@@ -202,7 +202,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "Requesting ForgeSphere service token..."
-          python3 pipeline-template/.github/scripts/get_service_token.py
+          python3 pipeline-template/scripts/get_service_token.py
           if [ -z "${GITHUB_OUTPUT:-}" ]; then
             echo "ERROR: GITHUB_OUTPUT is not available"
             exit 1
@@ -283,7 +283,7 @@ jobs:
           # Process configuration using Python
           # ------------------------------------------------
 
-          python3 pipeline-template/.github/scripts/load_cicd_config.py "$RESPONSE_FILE"
+          python3 pipeline-template/scripts/load_cicd_config.py "$RESPONSE_FILE"
 
           echo "ForgeSphere CI/CD configuration processed successfully"
 
