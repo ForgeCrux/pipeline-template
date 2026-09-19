@@ -170,42 +170,6 @@ jobs:
           echo "ForgeSphere ID : ${{ inputs.cicd_profile_id }}"
           echo "=========================================="
 
-
-      # ============================================================
-      # FORGESPHERE SERVICE TOKEN
-      # ============================================================
-
-      - name: Request ForgeSphere Service Token
-        id: service-token
-        shell: bash
-        env:
-          SERVICE_TOKEN_URL: ${{ secrets.PROB_SERVICE_TOKEN_URL }}
-          CLIENT_ID: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
-          TENANT_ID: ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
-        run: |
-          set -euo pipefail
-
-          if [[ -z "${SERVICE_TOKEN_URL:-}" ]]; then
-            echo "ERROR: PROB_SERVICE_TOKEN_URL is empty"
-            exit 1
-          fi
-
-          if [[ -z "${CLIENT_ID:-}" ]]; then
-            echo "ERROR: PROB_SERVICE_TOKEN_CLIENT_ID is empty"
-            exit 1
-          fi
-
-          if [[ -z "${CLIENT_SECRET:-}" ]]; then
-            echo "ERROR: PROB_SERVICE_TOKEN_CLIENT_SECRET is empty"
-            exit 1
-          fi
-
-          if [[ -z "${TENANT_ID:-}" ]]; then
-            echo "ERROR: PROB_SERVICE_TOKEN_TENANT_ID is empty"
-            exit 1
-          fi
-
       # ---------------------------------------------------
       # GET FORGESPHERE SERVICE TOKEN
       # ---------------------------------------------------
