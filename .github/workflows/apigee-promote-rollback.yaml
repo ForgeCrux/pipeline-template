@@ -59,7 +59,7 @@ on:
         default: "https://forgesphere.probestack.io/cicd-automation/v1/api/cicd-config"
         type: string
 
-      cicd_config_id:
+      cicd_profile_id:
         description: "ForgeSphere CI/CD profile ID"
         required: true
         type: string
