@@ -57,6 +57,11 @@ on:
         default: "https://forgesphere.probestack.io/cicd-automation/v1/api/cicd-config"
         type: string
 
+      cicd_config_id:
+        description: "ForgeSphere CI/CD profile ID"
+        required: true
+        type: string
+
   # ============================================================
   # REUSABLE WORKFLOW
   # ============================================================
@@ -109,12 +114,13 @@ on:
         description: "ForgeSphere CI/CD configuration API"
         required: true
         type: string
-
-    secrets:
-      cicd_profile_id:
+        
+      cicd_config_id:
         description: "ForgeSphere CI/CD profile ID"
-        required: false
-
+        required: true
+        type: string
+        
+    secrets:
       PROB_SERVICE_TOKEN_URL:
         description: "ForgeSphere service token endpoint"
         required: true
@@ -269,14 +275,16 @@ jobs:
           PROB_SERVICE_TOKEN_TENANT_ID: ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
         run: |
           set -euo pipefail
+          : "${PROB_SERVICE_TOKEN_URL:?PROB_SERVICE_TOKEN_URL is required}"
+          : "${PROB_SERVICE_TOKEN_CLIENT_ID:?PROB_SERVICE_TOKEN_CLIENT_ID is required}"
+          : "${PROB_SERVICE_TOKEN_CLIENT_SECRET:?PROB_SERVICE_TOKEN_CLIENT_SECRET is required}"
+          : "${PROB_SERVICE_TOKEN_TENANT_ID:?PROB_SERVICE_TOKEN_TENANT_ID is required}"
+      
           echo "Requesting ForgeSphere service token..."
+      
           python3 scripts/get_service_token.py
-          if [ -z "${GITHUB_OUTPUT:-}" ]; then
-            echo "ERROR: GITHUB_OUTPUT is not available"
-            exit 1
-          fi
+      
           echo "ForgeSphere service token generated successfully"
-
       # ---------------------------------------------------
       # LOAD FORGESPHERE CONFIGURATION
       # ---------------------------------------------------
