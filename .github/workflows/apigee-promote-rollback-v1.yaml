@@ -61,11 +61,6 @@ on:
         default: "https://forgesphere.probestack.io/cicd-automation/v1/api/cicd-config"
         type: string
 
-      cicd_config_id:
-        description: "ForgeSphere CI/CD configuration ID"
-        required: true
-        type: string
-
   # ============================================================
   # REUSABLE WORKFLOW
   # ============================================================
@@ -116,11 +111,6 @@ on:
 
       cicd_config_url:
         description: "ForgeSphere CI/CD configuration API"
-        required: true
-        type: string
-
-      cicd_config_id:
-        description: "ForgeSphere CI/CD configuration ID"
         required: true
         type: string
 
