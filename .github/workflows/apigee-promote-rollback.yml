@@ -1,7 +1,9 @@
 name: Reusable Apigee Promote / Rollback
 
 on:
+  # Allows REST API / GitHub UI execution
   workflow_dispatch:
+  
     inputs:
       operation:
         description: "Deployment operation: promote or rollback"
