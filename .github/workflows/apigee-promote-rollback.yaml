@@ -64,24 +64,6 @@ on:
         required: true
         type: string
         
-    secrets:
-      PROB_SERVICE_TOKEN_URL:
-        description: "ForgeSphere service token endpoint"
-        required: true
-
-      PROB_SERVICE_TOKEN_CLIENT_ID:
-        description: "ForgeSphere service token client ID"
-        required: true
-
-      PROB_SERVICE_TOKEN_CLIENT_SECRET:
-        description: "ForgeSphere service token client secret"
-        required: true
-
-      PROB_SERVICE_TOKEN_TENANT_ID:
-        description: "ForgeSphere service token tenant ID"
-        required: true
-
-
 # ==============================================================
 # PERMISSIONS
 # ==============================================================
@@ -201,7 +183,7 @@ jobs:
         shell: bash
         env:
           CICD_CONFIG_URL: ${{ inputs.cicd_config_url }}
-          CICD_PROFILE_ID: ${{ secrets.cicd_profile_id }}
+          CICD_CONFIG_ID: ${{ secrets.cicd_profile_id }}
           SERVICE_ACCESS_TOKEN: ${{ steps.service-token.outputs.access_token }}
           DEPLOY_PROXY: ${{ inputs.deploy_proxy }}
         run: |
