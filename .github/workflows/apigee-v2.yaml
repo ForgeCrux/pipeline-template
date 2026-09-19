@@ -46,7 +46,7 @@ on:
         type: string
 
     secrets:
-      cicd_config_id:
+      cicd_profile_id:
         required: true
       # GitHub authentication
       GH_TOKEN:
@@ -217,7 +217,7 @@ jobs:
         shell: bash
         env:
           CICD_CONFIG_URL: ${{ inputs.cicd_config_url }}
-          CICD_CONFIG_ID: ${{ secrets.cicd_config_id }}
+          CICD_CONFIG_ID: ${{ secrets.cicd_profile_id }}
           SERVICE_ACCESS_TOKEN: ${{ steps.service-token.outputs.access_token }}
           DEPLOY_PROXY: ${{ inputs.deploy_proxy }}
         run: |
