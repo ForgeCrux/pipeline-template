@@ -1,10 +1,6 @@
 name: Reusable Apigee Promote / Rollback
 
 on:
-
-  # ============================================================
-  # MANUAL / REST API EXECUTION
-  # ============================================================
   workflow_dispatch:
     inputs:
       operation:
@@ -115,7 +111,6 @@ on:
         type: string
 
     secrets:
-
       cicd_profile_id:
         description: "ForgeSphere CI/CD profile ID"
         required: false
