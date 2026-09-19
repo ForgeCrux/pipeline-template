@@ -283,7 +283,7 @@ jobs:
           # Process configuration using Python
           # ------------------------------------------------
 
-          python3 .github/scripts/load_cicd_config.py "$RESPONSE_FILE"
+          python3 pipeline-template/.github/scripts/load_cicd_config.py "$RESPONSE_FILE"
 
           echo "ForgeSphere CI/CD configuration processed successfully"
 
