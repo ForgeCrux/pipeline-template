@@ -226,65 +226,7 @@ jobs:
             echo "ERROR: ForgeSphere service token is empty"
             exit 1
           fi
-          CONFIG_URL="${CICD_CONFIG_URL%/}/${CICD_CONFIG_ID}/all?filtered=true"
-          echo "=========================================="
-          echo "FORGESPHERE CI/CD CONFIG"
-          echo "=========================================="
-          echo "Config ID : ${CICD_CONFIG_ID}"
-          echo "Proxy     : ${DEPLOY_PROXY}"
-          echo "=========================================="
-          RESPONSE_FILE="$(mktemp)"
-          trap 'rm -f "$RESPONSE_FILE"' EXIT
-          HTTP_STATUS="$(
-            curl \
-              --silent \
-              --show-error \
-              --location \
-              --fail-with-body \
-              --header "Authorization: Bearer ${SERVICE_ACCESS_TOKEN}" \
-              --header "Accept: application/json" \
-              --output "$RESPONSE_FILE" \
-              --write-out "%{http_code}" \
-              "$CONFIG_URL"
-          )" || {
-
-            echo "ERROR: Failed to call ForgeSphere CI/CD configuration API"
-
-            echo "Response:"
-            cat "$RESPONSE_FILE" || true
-
-            exit 1
-          }
-
-          echo "CI/CD Config HTTP Status: ${HTTP_STATUS}"
-
-          if [[ "${HTTP_STATUS}" -lt 200 ||
-                "${HTTP_STATUS}" -ge 300 ]]; then
-
-            echo "ERROR: ForgeSphere CI/CD configuration request failed"
-
-            echo "Response:"
-            cat "$RESPONSE_FILE"
-
-            exit 1
-          fi
-
-          echo "Validating CI/CD configuration JSON..."
-
-          if ! jq empty "$RESPONSE_FILE"; then
-            echo "ERROR: ForgeSphere returned invalid JSON"
-            cat "$RESPONSE_FILE"
-            exit 1
-          fi
-
-          echo "CI/CD configuration loaded successfully"
-
-          # ------------------------------------------------
-          # Process configuration using Python
-          # ------------------------------------------------
-
-          python3 pipeline-template/scripts/load_cicd_config.py "$RESPONSE_FILE"
-
+          python3 pipeline-template/scripts/load_cicd_config.py
           echo "ForgeSphere CI/CD configuration processed successfully"
 
       - name: End group ForgeSphere Configuration
