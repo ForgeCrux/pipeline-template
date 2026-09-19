@@ -208,8 +208,8 @@ jobs:
             exit 1
           fi
 
-          if [[ -z "${{ inputs.cicd_config_id }}" ]]; then
-            echo "ERROR: cicd_config_id must not be empty"
+          if [[ -z "${{ inputs.cicd_profile_id }}" ]]; then
+            echo "ERROR: cicd_profile_id must not be empty"
             exit 1
           fi
 
@@ -222,7 +222,7 @@ jobs:
           echo "Resource       : $RESOURCE_TYPE"
           echo "Name           : ${{ inputs.deploy_proxy }}"
           echo "Nexus Version  : ${{ inputs.nexus_version }}"
-          echo "ForgeSphere ID : ${{ inputs.cicd_config_id }}"
+          echo "ForgeSphere ID : ${{ inputs.cicd_profile_id }}"
           echo "=========================================="
 
 
@@ -290,7 +290,7 @@ jobs:
         shell: bash
         env:
           CICD_CONFIG_URL: ${{ inputs.cicd_config_url }}
-          CICD_CONFIG_ID: ${{ secrets.cicd_profile_id }}
+          CICD_PROFILE_ID: ${{ secrets.cicd_profile_id }}
           SERVICE_ACCESS_TOKEN: ${{ steps.service-token.outputs.access_token }}
           DEPLOY_PROXY: ${{ inputs.deploy_proxy }}
         run: |
@@ -681,6 +681,6 @@ jobs:
             echo "| Proxy / Shared Flow | ${{ inputs.deploy_proxy }} |"
             echo "| Nexus Version | ${{ inputs.nexus_version }} |"
             echo "| Apigee Revision | ${{ steps.import.outputs.revision }} |"
-            echo "| ForgeSphere Config | ${{ inputs.cicd_config_id }} |"
+            echo "| ForgeSphere Config | ${{ inputs.cicd_profile_id }} |"
           } >> "$GITHUB_STEP_SUMMARY"
 ```
