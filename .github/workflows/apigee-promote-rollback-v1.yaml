@@ -1,4 +1,3 @@
-```yaml
 name: Reusable Apigee Promote / Rollback
 
 on:
@@ -8,7 +7,6 @@ on:
   # ============================================================
   workflow_dispatch:
     inputs:
-
       operation:
         description: "Deployment operation: promote or rollback"
         required: true
