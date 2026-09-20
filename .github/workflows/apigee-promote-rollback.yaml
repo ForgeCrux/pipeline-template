@@ -162,7 +162,7 @@ jobs:
           PROB_SERVICE_TOKEN_URL: ${{ secrets.PROB_SERVICE_TOKEN_URL }}
           PROB_SERVICE_TOKEN_CLIENT_ID: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
           PROB_SERVICE_TOKEN_CLIENT_SECRET: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
-          PROB_SERVICE_TOKEN_TENANT_ID: ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
+          PROB_SERVICE_TOKEN_TENANT_ID: ${{ secrets.TENANT_ID }}
         run: |
           set -euo pipefail
           : "${PROB_SERVICE_TOKEN_URL:?PROB_SERVICE_TOKEN_URL is required}"
