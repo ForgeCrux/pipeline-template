@@ -17,14 +17,14 @@ on:
         type: string
 
       # ForgeSphere CICD configuration
-      cicd_config_id:
-        required: true
-        type: string
+      #cicd_config_id:
+      #  required: true
+      #  type: string
 
-      cicd_config_url:
-        required: false
-        type: string
-        default: "https://forgesphere.probestack.io/cicd-automation/v1/api/cicd-config"
+      #cicd_config_url:
+      #  required: false
+      #  type: string
+      #  default: "https://forgesphere.probestack.io/cicd-automation/v1/api/cicd-config"
 
       # Used by load_cicd_config.py to identify the deployed component.
       # For Kong this should normally be the proxy/service name.
