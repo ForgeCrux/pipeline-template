@@ -31,6 +31,7 @@ on:
       deploy_proxy:
         required: true
         type: string
+        default: "kong"
 
       deck_version:
         required: false
