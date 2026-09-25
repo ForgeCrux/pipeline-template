@@ -643,7 +643,7 @@ jobs:
         shell: bash
         env:
           TOKEN: ${{ steps.token.outputs.access_token }}
-          SERVICE_ACCOUNT_FILE: ${{ steps.config.outputs.serviceAccountFile }}
+          SERVICE_ACCOUNT_FILE: ${{ steps.config.outputs.apigee_serviceAccountFile }}
         run: |
           set -euo pipefail
           BASE_URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments"
