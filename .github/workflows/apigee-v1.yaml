@@ -498,7 +498,7 @@ jobs:
         id: token
         shell: bash
         env:
-          SERVICE_ACCOUNT_FILE: ${{ steps.config.outputs.serviceAccountFile }}
+          SERVICE_ACCOUNT_FILE: ${{ steps.config.outputs.apigee_serviceAccountFile }}
         run: |
           set -euo pipefail
       
