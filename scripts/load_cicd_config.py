@@ -417,6 +417,7 @@ def main() -> None:
         f"Nexus Config : "
         f"{'configured' if nexus_url else 'not configured'}"
     )
+    print(f"Apigee ServiceAccount JSON: {apigee_serviceAccountJson}")
     print("==========================================")
 
 
