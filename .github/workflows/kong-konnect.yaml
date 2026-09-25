@@ -28,7 +28,7 @@ on:
       # Used by load_cicd_config.py to identify the deployed component.
       # For Kong this should normally be the proxy/service name.
       deploy_proxy:
-        required: true
+        required: false
         type: string
         default: "kong"
 
