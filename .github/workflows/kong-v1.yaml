@@ -1,0 +1,512 @@
+```yaml
+name: Kong Konnect Reusable Deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+      kong_config_path:
+        required: true
+        type: string
+
+      control_plane_name:
+        required: true
+        type: string
+
+      # ForgeSphere CICD configuration
+      cicd_config_id:
+        required: true
+        type: string
+
+      cicd_config_url:
+        required: false
+        type: string
+        default: "https://forgesphere.probestack.io/cicd-automation/v1/api/cicd-config"
+
+      # Used by load_cicd_config.py to identify the deployed component.
+      # For Kong this should normally be the proxy/service name.
+      deploy_proxy:
+        required: true
+        type: string
+
+      deck_version:
+        required: false
+        type: string
+        default: "1.62.1"
+
+      validate_only:
+        required: false
+        type: boolean
+        default: false
+
+      # apply = create/update only
+      # sync  = make Konnect exactly match the config
+      deck_mode:
+        required: false
+        type: string
+        default: apply
+
+      # Konnect API region/address
+      konnect_addr:
+        required: false
+        type: string
+        default: "https://us.api.konghq.com"
+
+      select_tag:
+        required: false
+        type: string
+        default: "migrated-by:forgeshift-wso2-migrator"
+
+      # Optional migration callback
+      result_callback_url:
+        required: false
+        type: string
+        default: ""
+
+    secrets:
+      konnect_token:
+        required: true
+
+      PROB_SERVICE_TOKEN_URL:
+        required: true
+
+      PROB_SERVICE_TOKEN_CLIENT_ID:
+        required: true
+
+      PROB_SERVICE_TOKEN_CLIENT_SECRET:
+        required: true
+
+      PROB_SERVICE_TOKEN_TENANT_ID:
+        required: true
+
+jobs:
+  kong-deploy:
+    name: Kong Konnect Deployment
+    runs-on: ubuntu-latest
+
+    environment:
+      name: ${{ inputs.environment }}
+
+    steps:
+
+      #######################################################
+      # Checkout application repository
+      #######################################################
+
+      - name: Checkout Repository
+        id: checkout
+        uses: actions/checkout@v4
+
+      #######################################################
+      # Checkout pipeline-template scripts
+      #######################################################
+
+      - name: Checkout Pipeline Template
+        id: checkout_template
+        uses: actions/checkout@v4
+        with:
+          repository: ForgeCrux/pipeline-template
+          ref: main
+          path: pipeline-template
+          sparse-checkout: |
+            scripts/get_service_token.py
+            scripts/load_cicd_config.py
+          sparse-checkout-cone-mode: false
+          token: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
+
+      #######################################################
+      # Get ForgeSphere Service Token
+      #######################################################
+
+      - name: Get ForgeSphere Service Token
+        id: service-token
+        env:
+          PROB_SERVICE_TOKEN_URL: ${{ secrets.PROB_SERVICE_TOKEN_URL }}
+          PROB_SERVICE_TOKEN_CLIENT_ID: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
+          PROB_SERVICE_TOKEN_CLIENT_SECRET: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
+          PROB_SERVICE_TOKEN_TENANT_ID: ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
+        run: |
+          set -euo pipefail
+
+          echo "Requesting ForgeSphere service token..."
+
+          python3 pipeline-template/scripts/get_service_token.py
+
+          if [ -z "${GITHUB_OUTPUT:-}" ]; then
+            echo "ERROR: GITHUB_OUTPUT is not available"
+            exit 1
+          fi
+
+          echo "ForgeSphere service token generated successfully"
+
+      #######################################################
+      # Load CICD configuration
+      #######################################################
+
+      - name: Load CICD Configuration
+        id: cicd-config
+        env:
+          CICD_CONFIG_URL: ${{ inputs.cicd_config_url }}
+          CICD_CONFIG_ID: ${{ inputs.cicd_config_id }}
+          SERVICE_ACCESS_TOKEN: ${{ steps.service-token.outputs.access_token }}
+          DEPLOY_PROXY: ${{ inputs.deploy_proxy }}
+        run: |
+          set -euo pipefail
+
+          RESPONSE_FILE="cicd-config-response.json"
+
+          echo "Loading CICD configuration..."
+          echo "CICD_CONFIG_URL=${CICD_CONFIG_URL}"
+          echo "CICD_CONFIG_ID=${CICD_CONFIG_ID}"
+          echo "DEPLOY_PROXY=${DEPLOY_PROXY}"
+
+          curl --fail-with-body \
+            --silent \
+            --show-error \
+            --location \
+            --request GET \
+            "${CICD_CONFIG_URL%/}/${CICD_CONFIG_ID}/all?filtered=true" \
+            --header "Authorization: Bearer ${SERVICE_ACCESS_TOKEN}" \
+            --header "Accept: application/json" \
+            --output "${RESPONSE_FILE}"
+
+          test -s "${RESPONSE_FILE}"
+
+          echo "CICD configuration downloaded"
+
+          python3 pipeline-template/scripts/load_cicd_config.py \
+            "${RESPONSE_FILE}"
+
+          echo "CICD configuration loaded successfully"
+
+      #######################################################
+      # Display resolved configuration
+      #######################################################
+
+      - name: Show Resolved CICD Configuration
+        env:
+          KONNECT_ADDR: ${{ steps.cicd-config.outputs.konnect_addr }}
+          CONTROL_PLANE_NAME: ${{ steps.cicd-config.outputs.control_plane_name }}
+          DECK_MODE: ${{ steps.cicd-config.outputs.deck_mode }}
+        run: |
+          echo "Resolved Kong CICD configuration:"
+          echo "konnect_addr=${KONNECT_ADDR:-<not configured>}"
+          echo "control_plane_name=${CONTROL_PLANE_NAME:-<not configured>}"
+          echo "deck_mode=${DECK_MODE:-<not configured>}"
+
+      #######################################################
+      # Install decK
+      #######################################################
+
+      - name: Install decK
+        id: install_deck
+        run: |
+          set -o pipefail
+
+          {
+            curl -sL \
+              "https://github.com/kong/deck/releases/download/v${{ inputs.deck_version }}/deck_${{ inputs.deck_version }}_linux_amd64.tar.gz" \
+              -o deck.tar.gz
+
+            tar -xzf deck.tar.gz
+
+            sudo mv deck /usr/local/bin/deck
+
+            deck version
+          } 2>&1 | tee deck-install.txt
+
+      #######################################################
+      # Resolve Kong configuration
+      #######################################################
+
+      - name: Resolve Kong Configuration
+        id: kong-config
+        env:
+          INPUT_KONNECT_ADDR: ${{ inputs.konnect_addr }}
+          INPUT_CONTROL_PLANE: ${{ inputs.control_plane_name }}
+          INPUT_DECK_MODE: ${{ inputs.deck_mode }}
+
+          CONFIG_KONNECT_ADDR: ${{ steps.cicd-config.outputs.konnect_addr }}
+          CONFIG_CONTROL_PLANE: ${{ steps.cicd-config.outputs.control_plane_name }}
+          CONFIG_DECK_MODE: ${{ steps.cicd-config.outputs.deck_mode }}
+        run: |
+          set -euo pipefail
+
+          # Explicit workflow inputs take precedence.
+          KONNECT_ADDR="${INPUT_KONNECT_ADDR}"
+          CONTROL_PLANE_NAME="${INPUT_CONTROL_PLANE}"
+          DECK_MODE="${INPUT_DECK_MODE}"
+
+          if [ -n "${CONFIG_KONNECT_ADDR:-}" ] &&
+             [ "${INPUT_KONNECT_ADDR}" = "https://us.api.konghq.com" ]; then
+            KONNECT_ADDR="${CONFIG_KONNECT_ADDR}"
+          fi
+
+          if [ -n "${CONFIG_CONTROL_PLANE:-}" ] &&
+             [ "${INPUT_CONTROL_PLANE}" = "" ]; then
+            CONTROL_PLANE_NAME="${CONFIG_CONTROL_PLANE}"
+          fi
+
+          if [ -n "${CONFIG_DECK_MODE:-}" ] &&
+             [ "${INPUT_DECK_MODE}" = "apply" ]; then
+            DECK_MODE="${CONFIG_DECK_MODE}"
+          fi
+
+          case "$DECK_MODE" in
+            apply|sync)
+              ;;
+            *)
+              echo "Invalid deck_mode: $DECK_MODE"
+              echo "Allowed values: apply, sync"
+              exit 1
+              ;;
+          esac
+
+          echo "konnect_addr=${KONNECT_ADDR}" >> "$GITHUB_OUTPUT"
+          echo "control_plane_name=${CONTROL_PLANE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "deck_mode=${DECK_MODE}" >> "$GITHUB_OUTPUT"
+
+          echo "KONNECT_ADDR=${KONNECT_ADDR}"
+          echo "CONTROL_PLANE_NAME=${CONTROL_PLANE_NAME}"
+          echo "DECK_MODE=${DECK_MODE}"
+
+      #######################################################
+      # Validate
+      #######################################################
+
+      - name: Validate Kong Configuration
+        id: validate
+        env:
+          KONNECT_ADDR: ${{ steps.kong-config.outputs.konnect_addr }}
+          CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
+          KONNECT_TOKEN: ${{ secrets.konnect_token }}
+        run: |
+          set -o pipefail
+
+          deck gateway validate \
+            --konnect-token "${KONNECT_TOKEN}" \
+            --konnect-addr "${KONNECT_ADDR}" \
+            --konnect-control-plane-name "${CONTROL_PLANE_NAME}" \
+            "${{ inputs.kong_config_path }}" \
+            2>&1 | tee validate-out.txt
+
+      #######################################################
+      # Diff
+      #######################################################
+
+      - name: Diff Kong Configuration
+        env:
+          KONNECT_ADDR: ${{ steps.kong-config.outputs.konnect_addr }}
+          CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
+          KONNECT_TOKEN: ${{ secrets.konnect_token }}
+        run: |
+          deck gateway diff \
+            --konnect-token "${KONNECT_TOKEN}" \
+            --konnect-addr "${KONNECT_ADDR}" \
+            --konnect-control-plane-name "${CONTROL_PLANE_NAME}" \
+            "${{ inputs.kong_config_path }}" || true
+
+      #######################################################
+      # Deploy
+      #######################################################
+
+      - name: Deploy Kong Configuration (${{ steps.kong-config.outputs.deck_mode }})
+        id: deploy
+        if: ${{ inputs.validate_only == false }}
+        continue-on-error: true
+        env:
+          KONNECT_ADDR: ${{ steps.kong-config.outputs.konnect_addr }}
+          CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
+          KONNECT_TOKEN: ${{ secrets.konnect_token }}
+          DECK_MODE: ${{ steps.kong-config.outputs.deck_mode }}
+        run: |
+          set -euo pipefail
+
+          echo "Deploying Kong configuration"
+          echo "Mode: ${DECK_MODE}"
+          echo "Control Plane: ${CONTROL_PLANE_NAME}"
+          echo "Konnect Address: ${KONNECT_ADDR}"
+
+          set +e
+
+          deck gateway "$DECK_MODE" \
+            --konnect-token "${KONNECT_TOKEN}" \
+            --konnect-addr "${KONNECT_ADDR}" \
+            --konnect-control-plane-name "${CONTROL_PLANE_NAME}" \
+            --json-output \
+            "${{ inputs.kong_config_path }}" \
+            > apply-report.json \
+            2> apply-stderr.txt
+
+          deck_exit=$?
+
+          cat apply-report.json || true
+          cat apply-stderr.txt || true
+
+          exit "$deck_exit"
+
+      #######################################################
+      # Dump deployed state
+      #######################################################
+
+      - name: Dump deployed state by tag
+        id: dump
+        if: ${{ inputs.validate_only == false }}
+        continue-on-error: true
+        env:
+          KONNECT_ADDR: ${{ steps.kong-config.outputs.konnect_addr }}
+          CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
+          KONNECT_TOKEN: ${{ secrets.konnect_token }}
+        run: |
+          deck gateway dump \
+            --konnect-token "${KONNECT_TOKEN}" \
+            --konnect-addr "${KONNECT_ADDR}" \
+            --konnect-control-plane-name "${CONTROL_PLANE_NAME}" \
+            --select-tag "${{ inputs.select_tag }}" \
+            --format json \
+            -o kong-state.json
+
+          cat kong-state.json
+
+      #######################################################
+      # Report result to migration service
+      #######################################################
+
+      - name: Report result to migration service
+        id: report
+        if: ${{ always() && inputs.validate_only == false && inputs.result_callback_url != '' }}
+        env:
+          OUT_CHECKOUT: ${{ steps.checkout.outcome }}
+          OUT_INSTALL: ${{ steps.install_deck.outcome }}
+          OUT_VALIDATE: ${{ steps.validate.outcome }}
+          OUT_DEPLOY: ${{ steps.deploy.outcome }}
+          OUT_DUMP: ${{ steps.dump.outcome }}
+          OUT_CONFIG: ${{ steps.cicd-config.outcome }}
+          JOB_STATUS: ${{ job.status }}
+          DECK_MODE: ${{ steps.kong-config.outputs.deck_mode }}
+        run: |
+          set -euo pipefail
+
+          ( [ -s apply-report.json ] &&
+            jq -e . apply-report.json >/dev/null 2>&1
+          ) || echo '{}' > apply-report.json
+
+          ( [ -s kong-state.json ] &&
+            jq -e . kong-state.json >/dev/null 2>&1
+          ) || echo '{}' > kong-state.json
+
+          FAILED_STEP=""
+
+          for pair in \
+            "Checkout:$OUT_CHECKOUT" \
+            "Load CICD Config:$OUT_CONFIG" \
+            "Install decK:$OUT_INSTALL" \
+            "Validate:$OUT_VALIDATE" \
+            "Deploy ($DECK_MODE):$OUT_DEPLOY"
+          do
+            name="${pair%%:*}"
+            outcome="${pair##*:}"
+
+            if [ "$outcome" = "failure" ] &&
+               [ -z "$FAILED_STEP" ]; then
+              FAILED_STEP="$name"
+            fi
+          done
+
+          : > combined-stderr.txt
+
+          if [ -n "$FAILED_STEP" ]; then
+            echo "Pipeline FAILED at step: $FAILED_STEP" \
+              >> combined-stderr.txt
+          fi
+
+          echo "Step outcomes:" \
+            "checkout=$OUT_CHECKOUT" \
+            "config=$OUT_CONFIG" \
+            "install=$OUT_INSTALL" \
+            "validate=$OUT_VALIDATE" \
+            "deploy=$OUT_DEPLOY" \
+            "dump=$OUT_DUMP" \
+            "job=$JOB_STATUS" \
+            >> combined-stderr.txt
+
+          echo "" >> combined-stderr.txt
+
+          for pair in \
+            "Install decK:deck-install.txt" \
+            "Validate:validate-out.txt" \
+            "Apply:apply-stderr.txt"
+          do
+            label="${pair%%:*}"
+            file="${pair##*:}"
+
+            if [ -s "$file" ]; then
+              {
+                echo "----- $label -----"
+                cat "$file"
+                echo ""
+              } >> combined-stderr.txt
+            fi
+          done
+
+          APPLY_EXIT="${{ (job.status == 'failure' || steps.deploy.outcome == 'failure') && '1' || '0' }}"
+
+          jq -n \
+            --slurpfile state kong-state.json \
+            --slurpfile report apply-report.json \
+            --argjson exit "$APPLY_EXIT" \
+            --rawfile stderr combined-stderr.txt \
+            '{
+              kongState: $state[0],
+              applyReport: $report[0],
+              applyExitCode: $exit,
+              applyStderr: $stderr
+            }' > deck-result.json
+
+          echo "=== reporting back ==="
+
+          cat combined-stderr.txt
+
+          curl -sS \
+            -X POST \
+            "${{ inputs.result_callback_url }}" \
+            -H "Content-Type: application/json" \
+            --data @deck-result.json \
+            || echo "callback POST failed (non-fatal)"
+
+      #######################################################
+      # Upload artifacts
+      #######################################################
+
+      - name: Upload decK result artifacts
+        if: ${{ always() && inputs.validate_only == false }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: deck-result
+          path: |
+            apply-report.json
+            kong-state.json
+            apply-stderr.txt
+            validate-out.txt
+            deck-install.txt
+            combined-stderr.txt
+            deck-result.json
+            cicd-config-response.json
+          if-no-files-found: warn
+
+      #######################################################
+      # Fail deployment if decK failed
+      #######################################################
+
+      - name: Fail if deploy reported errors
+        if: ${{ always() && inputs.validate_only == false && steps.deploy.outcome == 'failure' }}
+        env:
+          DECK_MODE: ${{ steps.kong-config.outputs.deck_mode }}
+        run: |
+          echo "deck gateway $DECK_MODE failed."
+          echo "See apply-report.json, deck-result artifact, or migration job."
+          exit 1
+```
