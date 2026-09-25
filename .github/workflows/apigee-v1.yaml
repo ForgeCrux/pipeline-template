@@ -641,17 +641,39 @@ jobs:
 
       - name: Deploy Proxy
         shell: bash
+        env:
+          TOKEN: ${{ steps.token.outputs.access_token }}
+          SERVICE_ACCOUNT_FILE: ${{ steps.config.outputs.serviceAccountFile }}
         run: |
           set -euo pipefail
           BASE_URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments"
           TOKEN="${{ steps.token.outputs.access_token }}"
           
-          if [ -n "${{ steps.config.outputs.serviceAccountJson }}" ]; then
-            URL="${BASE_URL}?serviceAccount=${{ steps.config.outputs.serviceAccountJson }}"
-          else
-            URL="$BASE_URL"
+          if [ ! -f "$SERVICE_ACCOUNT_FILE" ]; then
+            echo "ERROR: Apigee service account file not found:"
+            echo "$SERVICE_ACCOUNT_FILE"
+            exit 1
           fi
-
+      
+          SERVICE_ACCOUNT_EMAIL="$(
+            jq -r '.client_email // empty' \
+              "$SERVICE_ACCOUNT_FILE"
+          )"
+      
+          if [ -z "$SERVICE_ACCOUNT_EMAIL" ]; then
+            echo "ERROR: client_email missing from Apigee service account JSON"
+            exit 1
+          fi
+      
+          echo "Apigee service account: $SERVICE_ACCOUNT_EMAIL"
+      
+          # URL encode the service-account email.
+          SERVICE_ACCOUNT_QUERY="$(
+            printf '%s' "$SERVICE_ACCOUNT_EMAIL" |
+            jq -sRr @uri
+          )"
+      
+          URL="${BASE_URL}?serviceAccount=${SERVICE_ACCOUNT_QUERY}"
           BODY='{ "override": true }'
 
           RESPONSE="$(
