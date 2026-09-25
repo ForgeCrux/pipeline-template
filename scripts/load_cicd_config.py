@@ -385,10 +385,10 @@ def main() -> None:
         # ForgeSphere may return this either as an object
         # or as a JSON string.
         if isinstance(apigee_serviceAccountJson, dict):
-            service_account_data = apigee_serviceAccountJson
+            apigee_service_account_data = apigee_serviceAccountJson
     
         elif isinstance(apigee_serviceAccountJson, str):
-            service_account_data = json.loads(
+            apigee_service_account_data = json.loads(
                 apigee_serviceAccountJson
             )
     
@@ -404,7 +404,7 @@ def main() -> None:
             f"{exc}"
         )
     
-    if not isinstance(service_account_data, dict):
+    if not isinstance(apigee_service_account_data, dict):
         fail(
             "apigeDetails.serviceAccountJson "
             "must contain a JSON object"
@@ -421,7 +421,7 @@ def main() -> None:
     missing_fields = [
         field
         for field in required_fields
-        if not service_account_data.get(field)
+        if not apigee_service_account_data.get(field)
     ]
     
     if missing_fields:
@@ -430,7 +430,7 @@ def main() -> None:
             f"Missing fields: {', '.join(missing_fields)}"
         )
     
-    service_account_email = service_account_data["client_email"]
+    apigee_service_account_email = apigee_service_account_data["client_email"]
     
     # RUNNER_TEMP is provided by GitHub Actions.
     # Fall back to the system temp directory for local execution.
@@ -439,7 +439,7 @@ def main() -> None:
         "/tmp",
     )
     
-    service_account_file = os.path.join(
+    apigee_service_account_file = os.path.join(
         runner_temp,
         "apigee-service-account.json",
     )
@@ -451,14 +451,14 @@ def main() -> None:
             encoding="utf-8",
         ) as file:
             json.dump(
-                service_account_data,
+                apigee_service_account_data,
                 file,
                 indent=2,
             )
     
         # Private-key file must not be world-readable.
         os.chmod(
-            service_account_file,
+            apigee_service_account_file,
             0o600,
         )
     
@@ -470,7 +470,7 @@ def main() -> None:
     
     print(
         "Apigee service account configured: "
-        f"{service_account_email}"
+        f"{apigee_service_account_email}"
     )
 
     # ------------------------------------------------
