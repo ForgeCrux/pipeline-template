@@ -643,10 +643,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments"
-
+          BASE_URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments"
           TOKEN="${{ steps.token.outputs.access_token }}"
+          
+          if [ -n "${{ steps.config.outputs.serviceAccountJson }}" ]; then
+            URL="${BASE_URL}?serviceAccount=${{ steps.config.outputs.serviceAccountJson }}"
+          else
+            URL="$BASE_URL"
+          fi
 
           BODY='{ "override": true }'
 
