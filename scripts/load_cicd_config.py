@@ -522,12 +522,12 @@ def main() -> None:
     )
     print(
         "Apigee Service Account: " 
-        f"{service_account_email}"
+        f"{apigee_service_account_email}"
     )
     
     print(
         "Apigee Service Account File: "
-        f"{service_account_file}"
+        f"{apigee_service_account_file}"
     )
     print("==========================================")
 
