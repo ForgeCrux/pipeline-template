@@ -123,8 +123,8 @@ jobs:
           sparse-checkout: |
             scripts/get_service_token.py
             scripts/load_cicd_config.py
-          sparse-checkout-cone-mode: false
-          token: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
+          #sparse-checkout-cone-mode: false
+          #token: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
 
       #######################################################
       # Get ForgeSphere Service Token
