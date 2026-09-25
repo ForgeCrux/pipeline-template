@@ -446,7 +446,7 @@ def main() -> None:
     
     try:
         with open(
-            service_account_file,
+            apigee_service_account_file,
             "w",
             encoding="utf-8",
         ) as file:
@@ -496,8 +496,8 @@ def main() -> None:
         "nexus_username": nexus_username,
         "nexus_password": nexus_password,
         "nexus_repository": nexus_repository,
-        "serviceAccountFile": service_account_file,
-        "serviceAccountEmail": service_account_email,
+        "apigee_serviceAccountFile": apigee_service_account_file,
+        "apigee_serviceAccountEmail": apigee_service_account_email,
     }
 
     write_outputs(
