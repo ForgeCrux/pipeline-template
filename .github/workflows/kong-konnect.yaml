@@ -1,4 +1,3 @@
-```yaml
 name: Kong Konnect Reusable Deploy
 
 on:
@@ -510,4 +509,3 @@ jobs:
           echo "deck gateway $DECK_MODE failed."
           echo "See apply-report.json, deck-result artifact, or migration job."
           exit 1
-```
