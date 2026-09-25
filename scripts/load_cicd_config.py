@@ -363,6 +363,14 @@ def main() -> None:
         or ""
     )
 
+    apigee_serviceAccountJson = (
+        get(
+            pipeline_config,
+            "apigeeDetails.serviceAccountJson",
+        )
+        or ""
+    )
+
     # ------------------------------------------------
     # MASK SECRETS
     # ------------------------------------------------
@@ -386,6 +394,7 @@ def main() -> None:
         "nexus_username": nexus_username,
         "nexus_password": nexus_password,
         "nexus_repository": nexus_repository,
+        "serviceAccountJson": apigee_serviceAccountJson,
     }
 
     write_outputs(
