@@ -363,12 +363,114 @@ def main() -> None:
         or ""
     )
 
+    # ------------------------------------------------
+    # APIGEE SERVICE ACCOUNT
+    # ------------------------------------------------
+    
     apigee_serviceAccountJson = (
         get(
             pipeline_config,
             "apigeeDetails.serviceAccountJson",
         )
         or ""
+    )
+    
+    if not apigee_serviceAccountJson:
+        fail(
+            "apigeeDetails.serviceAccountJson "
+            "is not configured"
+        )
+    
+    try:
+        # ForgeSphere may return this either as an object
+        # or as a JSON string.
+        if isinstance(apigee_serviceAccountJson, dict):
+            service_account_data = apigee_serviceAccountJson
+    
+        elif isinstance(apigee_serviceAccountJson, str):
+            service_account_data = json.loads(
+                apigee_serviceAccountJson
+            )
+    
+        else:
+            fail(
+                "apigeeDetails.serviceAccountJson "
+                "must be a JSON object or JSON string"
+            )
+    
+    except json.JSONDecodeError as exc:
+        fail(
+            "Invalid apigeeDetails.serviceAccountJson JSON: "
+            f"{exc}"
+        )
+    
+    if not isinstance(service_account_data, dict):
+        fail(
+            "apigeDetails.serviceAccountJson "
+            "must contain a JSON object"
+        )
+    
+    # Validate the fields required for a Google service account.
+    required_fields = [
+        "type",
+        "project_id",
+        "private_key",
+        "client_email",
+    ]
+    
+    missing_fields = [
+        field
+        for field in required_fields
+        if not service_account_data.get(field)
+    ]
+    
+    if missing_fields:
+        fail(
+            "Invalid Apigee service account JSON. "
+            f"Missing fields: {', '.join(missing_fields)}"
+        )
+    
+    service_account_email = service_account_data["client_email"]
+    
+    # RUNNER_TEMP is provided by GitHub Actions.
+    # Fall back to the system temp directory for local execution.
+    runner_temp = os.environ.get(
+        "RUNNER_TEMP",
+        "/tmp",
+    )
+    
+    service_account_file = os.path.join(
+        runner_temp,
+        "apigee-service-account.json",
+    )
+    
+    try:
+        with open(
+            service_account_file,
+            "w",
+            encoding="utf-8",
+        ) as file:
+            json.dump(
+                service_account_data,
+                file,
+                indent=2,
+            )
+    
+        # Private-key file must not be world-readable.
+        os.chmod(
+            service_account_file,
+            0o600,
+        )
+    
+    except OSError as exc:
+        fail(
+            "Unable to create Apigee service account file: "
+            f"{exc}"
+        )
+    
+    print(
+        "Apigee service account configured: "
+        f"{service_account_email}"
     )
 
     # ------------------------------------------------
@@ -394,7 +496,8 @@ def main() -> None:
         "nexus_username": nexus_username,
         "nexus_password": nexus_password,
         "nexus_repository": nexus_repository,
-        "serviceAccountJson": apigee_serviceAccountJson,
+        "serviceAccountFile": service_account_file,
+        "serviceAccountEmail": service_account_email,
     }
 
     write_outputs(
@@ -417,7 +520,15 @@ def main() -> None:
         f"Nexus Config : "
         f"{'configured' if nexus_url else 'not configured'}"
     )
-    print(f"Apigee ServiceAccount JSON: {apigee_serviceAccountJson}")
+    print(
+        "Apigee Service Account: " 
+        f"{service_account_email}"
+    )
+    
+    print(
+        "Apigee Service Account File: "
+        f"{service_account_file}"
+    )
     print("==========================================")
 
 
