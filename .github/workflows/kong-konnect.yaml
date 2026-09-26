@@ -20,10 +20,10 @@ on:
       #  required: true
       #  type: string
 
-      #cicd_config_url:
-      #  required: false
-      #  type: string
-      #  default: "https://forgesphere.probestack.io/cicd-automation/v1/api/cicd-config"
+      cicd_config_url:
+        required: false
+        type: string
+        default: "https://forgesphere.probestack.io/cicd-automation/v1/api/cicd-config"
 
       # Used by load_cicd_config.py to identify the deployed component.
       # For Kong this should normally be the proxy/service name.
@@ -158,7 +158,7 @@ jobs:
         id: cicd-config
         env:
           CICD_CONFIG_URL: ${{ inputs.cicd_config_url }}
-          CICD_CONFIG_ID: ${{ inputs.cicd_config_id }}
+          CICD_CONFIG_ID: ${{ secrets.cicd_profile_id }}
           SERVICE_ACCESS_TOKEN: ${{ steps.service-token.outputs.access_token }}
           DEPLOY_PROXY: ${{ inputs.deploy_proxy }}
         run: |
