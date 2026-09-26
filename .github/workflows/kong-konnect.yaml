@@ -87,6 +87,8 @@ on:
 
       PROB_SERVICE_TOKEN_CLIENT_SECRET:
         required: true
+      PROB_SERVICE_TOKEN_TENANT_ID: 
+       required: true
 
 jobs:
   kong-deploy:
