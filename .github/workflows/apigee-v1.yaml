@@ -502,83 +502,26 @@ jobs:
         with:
           workload_identity_provider: ${{ steps.config.outputs.apigee_workload_identity_provider }}
           service_account: ${{ steps.config.outputs.apigee_serviceAccountEmail }}
+          token_format: access_token
+          access_token_lifetime: 3600s
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          create_credentials_file: true
+          export_environment_variables: true
+          cleanup_credentials: true
+          
+      - name: Verify authentication
+        run: |
+          set -euo pipefail
 
+          if [ -z "${{ steps.gcp-auth.outputs.access_token }}" ]; then
+            echo "ERROR: Access token was not generated"
+            exit 1
+          fi
+
+          echo "Apigee access token generated successfully"
       - name: End Gcloud login
         if: always()
         run: echo "::endgcloud Login::"
-        
-      - name: Start group Token auth
-        run: echo "::group::Token auth"
-      
-      - name: Get Access Token
-        id: token
-        shell: bash
-        env:
-          SERVICE_ACCOUNT_FILE: ${{ steps.config.outputs.apigee_serviceAccountFile }}
-        run: |
-          set -euo pipefail
-      
-          echo "Authenticating using Apigee service account"
-      
-          if [ ! -f "$SERVICE_ACCOUNT_FILE" ]; then
-            echo "ERROR: Service account file does not exist:"
-            echo "$SERVICE_ACCOUNT_FILE"
-            exit 1
-          fi
-      
-          # Validate service account JSON
-          SERVICE_ACCOUNT_EMAIL="$(
-            jq -r '.client_email // empty' "$SERVICE_ACCOUNT_FILE"
-          )"
-      
-          PROJECT_ID="$(
-            jq -r '.project_id // empty' "$SERVICE_ACCOUNT_FILE"
-          )"
-      
-          if [ -z "$SERVICE_ACCOUNT_EMAIL" ]; then
-            echo "ERROR: client_email missing from service account JSON"
-            exit 1
-          fi
-      
-          if [ -z "$PROJECT_ID" ]; then
-            echo "ERROR: project_id missing from service account JSON"
-            exit 1
-          fi
-      
-          echo "Service account: $SERVICE_ACCOUNT_EMAIL"
-          echo "Project: $PROJECT_ID"
-      
-          # Authenticate gcloud using the service-account JSON
-          #gcloud auth activate-service-account \
-          #  "$SERVICE_ACCOUNT_EMAIL" \
-          #  --key-file="$SERVICE_ACCOUNT_FILE" \
-          #  --project="$PROJECT_ID"
-      
-          # Generate OAuth access token
-          #ACCESS_TOKEN="$(
-            #gcloud auth print-access-token
-          #)"
-
-          ACCESS_TOKEN="$(
-            gcloud auth print-access-token \
-              --impersonate-service-account="$SERVICE_ACCOUNT_EMAIL"
-          )"
-      
-          if [ -z "$ACCESS_TOKEN" ]; then
-            echo "ERROR: Failed to generate Google access token"
-            exit 1
-          fi
-      
-          echo "::add-mask::$ACCESS_TOKEN"
-      
-          echo "access_token=$ACCESS_TOKEN" >> "$GITHUB_OUTPUT"
-      
-          echo "Apigee access token generated successfully"
-
-      - name: End group Token auth
-        if: always()
-        run: echo "::endgroup::"
-
 
       # ===================================================
       # IMPORT
@@ -600,8 +543,10 @@ jobs:
 
           URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/${{ inputs.resourcetype }}?action=import&name=${{ inputs.deploy_proxy }}"
 
-          TOKEN="${{ steps.token.outputs.access_token }}"
-
+          #TOKEN="${{ steps.token.outputs.access_token }}"
+          
+          TOKEN="${{ steps.gcp-auth.outputs.access_token }}"
+          
           RESPONSE="$(
             curl \
               --silent \
@@ -649,7 +594,7 @@ jobs:
             curl \
               --silent \
               --show-error \
-              -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
+              -H "Authorization: Bearer ${{ steps.gcp-auth.outputs.access_token }}" \
               "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}/revisions" |
             jq -r 'map(tonumber) | max'
           )"
@@ -678,12 +623,13 @@ jobs:
       - name: Deploy Proxy
         shell: bash
         env:
-          TOKEN: ${{ steps.token.outputs.access_token }}
+          TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
           SERVICE_ACCOUNT_FILE: ${{ steps.config.outputs.apigee_serviceAccountFile }}
+          service_account: ${{ steps.config.outputs.apigee_serviceAccountEmail }}
         run: |
           set -euo pipefail
           BASE_URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments"
-          TOKEN="${{ steps.token.outputs.access_token }}"
+          TOKEN="${{ steps.gcp-auth.outputs.access_token }}"
           
           if [ ! -f "$SERVICE_ACCOUNT_FILE" ]; then
             echo "ERROR: Apigee service account file not found:"
@@ -709,7 +655,8 @@ jobs:
             jq -sRr @uri
           )"
       
-          URL="${BASE_URL}?serviceAccount=${SERVICE_ACCOUNT_QUERY}"
+          #URL="${BASE_URL}?serviceAccount=${SERVICE_ACCOUNT_QUERY}"
+          URL="${BASE_URL}?serviceAccount=${service_account}"
           BODY='{ "override": true }'
 
           RESPONSE="$(
