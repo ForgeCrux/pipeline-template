@@ -533,14 +533,15 @@ jobs:
           echo "Project: $PROJECT_ID"
       
           # Authenticate gcloud using the service-account JSON
-          gcloud auth activate-service-account \
-            "$SERVICE_ACCOUNT_EMAIL" \
-            --key-file="$SERVICE_ACCOUNT_FILE" \
-            --project="$PROJECT_ID"
+          #gcloud auth activate-service-account \
+          #  "$SERVICE_ACCOUNT_EMAIL" \
+          #  --key-file="$SERVICE_ACCOUNT_FILE" \
+          #  --project="$PROJECT_ID"
       
           # Generate OAuth access token
           ACCESS_TOKEN="$(
-            gcloud auth print-access-token
+            #gcloud auth print-access-token
+            gcloud auth print-access-token --impersonate-service-account="$SERVICE_ACCOUNT_EMAIL"
           )"
       
           if [ -z "$ACCESS_TOKEN" ]; then
