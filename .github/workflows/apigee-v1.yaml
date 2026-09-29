@@ -490,7 +490,20 @@ jobs:
       # ===================================================
       # APIGEE TOKEN SERVICE AUTH
       # ===================================================
+      - name: Start Gcloud login
+        run: echo "::Gcloud:Login"
 
+      - name: Authenticate GitHub to Google Cloud
+        id: gcp-auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ steps.config.outputs.apigee_workload_identity_provider }}
+          service_account: ${{ steps.config.outputs.apigee_serviceAccountFile }}
+
+      - name: End Gcloud login
+        if: always()
+        run: echo "::endgcloud Login::"
+        
       - name: Start group Token auth
         run: echo "::group::Token auth"
       
@@ -539,9 +552,13 @@ jobs:
           #  --project="$PROJECT_ID"
       
           # Generate OAuth access token
-          ACCESS_TOKEN="$(
+          #ACCESS_TOKEN="$(
             #gcloud auth print-access-token
-            gcloud auth print-access-token --impersonate-service-account="$SERVICE_ACCOUNT_EMAIL"
+          #)"
+
+          ACCESS_TOKEN="$(
+            gcloud auth print-access-token \
+              --impersonate-service-account="$SERVICE_ACCOUNT_EMAIL"
           )"
       
           if [ -z "$ACCESS_TOKEN" ]; then
