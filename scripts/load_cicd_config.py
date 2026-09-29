@@ -412,9 +412,6 @@ def main() -> None:
     
     # Validate the fields required for a Google service account.
     required_fields = [
-        "type",
-        "project_id",
-        "private_key",
         "client_email",
     ]
     
