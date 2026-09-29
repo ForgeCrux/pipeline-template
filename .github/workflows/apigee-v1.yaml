@@ -498,7 +498,7 @@ jobs:
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ steps.config.outputs.apigee_workload_identity_provider }}
-          service_account: ${{ steps.config.outputs.apigee_serviceAccountFile }}
+          service_account: ${{ steps.config.outputs.apigee_serviceAccountEmail }}
 
       - name: End Gcloud login
         if: always()
