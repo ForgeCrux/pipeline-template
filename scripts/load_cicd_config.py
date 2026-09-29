@@ -413,6 +413,7 @@ def main() -> None:
     # Validate the fields required for a Google service account.
     required_fields = [
         "client_email",
+        "workload_identity_provider",
     ]
     
     missing_fields = [
@@ -428,6 +429,7 @@ def main() -> None:
         )
     
     apigee_service_account_email = apigee_service_account_data["client_email"]
+    apigee_workload_identity_provider = apigee_service_account_data["workload_identity_provider"]
     
     # RUNNER_TEMP is provided by GitHub Actions.
     # Fall back to the system temp directory for local execution.
@@ -495,6 +497,7 @@ def main() -> None:
         "nexus_repository": nexus_repository,
         "apigee_serviceAccountFile": apigee_service_account_file,
         "apigee_serviceAccountEmail": apigee_service_account_email,
+        "apigee_workload_identity_provider": apigee_workload_identity_provider,
     }
 
     write_outputs(
