@@ -656,7 +656,7 @@ jobs:
           )"
       
           #URL="${BASE_URL}?serviceAccount=${SERVICE_ACCOUNT_QUERY}"
-          URL="${BASE_URL}?serviceAccount=${service_account}"
+          URL="${BASE_URL}?serviceAccount=${SERVICE_ACCOUNT_QUERY}"
           BODY='{ "override": true }'
 
           RESPONSE="$(
@@ -699,22 +699,31 @@ jobs:
 
       - name: Verify Deployment
         shell: bash
+        env:
+          TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
         run: |
           set -euo pipefail
+      
+          if [ -z "$TOKEN" ]; then
+            echo "ERROR: Google Cloud access token is empty"
+            exit 1
+          fi
+      
           STATUS="$(
             curl \
               --silent \
               --show-error \
               --output /dev/null \
               --write-out "%{http_code}" \
-              -H "Authorization: Bearer ${{ steps.token.outputs.access_token }}" \
+              -H "Authorization: Bearer $TOKEN" \
               "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}"
           )"
-
+      
           if [ "$STATUS" != "200" ]; then
-            echo "Proxy does not exist"
+            echo "Proxy verification failed with HTTP status $STATUS"
             exit 1
           fi
+      
           echo "Proxy verified successfully"
 
       - name: End group Verify
