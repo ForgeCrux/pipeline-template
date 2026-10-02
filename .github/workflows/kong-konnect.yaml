@@ -297,20 +297,21 @@ jobs:
       # Validate
       #######################################################
 
-      - name: Validate Kong Configuration
-        id: validate
-        #env:
-        #  KONNECT_ADDR: ${{ steps.cicd-config.outputs.kong_host_url }}
-        #  CONTROL_PLANE_NAME: ${{ steps.cicd-config.outputs.kong_control_plane }}
-        #  DECK_MODE: ${{ steps.cicd-config.outputs.kong_deck_mode }}
-        #  KONNECT_TOKEN: ${{ steps.kong-config.outputs.kong_pat_token }}
+      - name: Validate Kong configuration
+        env:
+          KONNECT_ADDR: ${{ steps.cicd-config.outputs.konnect_addr }}
+          CONTROL_PLANE_NAME: ${{ steps.cicd-config.outputs.control_plane_name }}
+          DECK_MODE: ${{ steps.cicd-config.outputs.deck_mode }}
+          KONNECT_TOKEN: ${{ steps.cicd-config.outputs.konnect_token }}
         run: |
           set -o pipefail
-          KONNECT_ADDR="${{ steps.cicd-config.outputs.kong_host_url }}"
-          CONTROL_PLANE_NAME="${{ steps.cicd-config.outputs.kong_control_plane }}"
-          DECK_MODE="${{ steps.cicd-config.outputs.kong_deck_mode }}"
-          KONNECT_PAT="${{ steps.cicd-config.outputs.kong_pat_token }}"
-          echo "${KONNECT_TOKEN}","${KONNECT_ADDR}","${CONTROL_PLANE_NAME}"
+      
+          echo "Konnect configuration:"
+          echo "  Address: ${KONNECT_ADDR}"
+          echo "  Control Plane: ${CONTROL_PLANE_NAME}"
+          echo "  Deck Mode: ${DECK_MODE}"
+          echo "  Token: ********"
+      
           deck gateway validate \
             --konnect-token "${KONNECT_TOKEN}" \
             --konnect-addr "${KONNECT_ADDR}" \
