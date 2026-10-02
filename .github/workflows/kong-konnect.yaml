@@ -4,7 +4,8 @@ on:
   workflow_call:
     inputs:
       environment:
-        required: true
+        required: false
+        default: dev
         type: string
 
       kong_config_path:
@@ -95,8 +96,8 @@ jobs:
     name: Kong Konnect Deployment
     runs-on: ubuntu-latest
 
-    #environment:
-    #  name: ${{ inputs.environment }}
+    environment:
+      name: ${{ inputs.environment }}
 
     steps:
 
