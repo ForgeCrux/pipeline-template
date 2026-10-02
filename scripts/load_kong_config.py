@@ -650,14 +650,14 @@ def main() -> None:
     print("KONG CONFIGURATION LOADED")
     print("==========================================")
 
-    print(f"Environment       : {environment}")
-    print(f"Environment Label : {environment_label}")
+    print(f"Environment        : {environment}")
+    print(f"Environment Label  : {environment_label}")
     print(f"Provider           : {environment_provider}")
     print(f"CR Required        : {cr_required}")
 
     print("")
     print("Kong Configuration")
-    print(f"Control Plane      : {kong_control_plane}")
+    print(f"Control Plane       : {kong_control_plane}")
     print(f"Host URL            : {kong_host_url}")
     print(f"Deck Mode           : {kong_deck_mode}")
     print(f"kong pat token      : {kong_pat_token}")
@@ -677,14 +677,14 @@ def main() -> None:
     print("")
     print("Artifacts")
     print(
-        f"Artifact Tools      : "
+        f"Artifact Tools       : "
         f"{', '.join(artifact_tools)}"
     )
 
     print("")
     print("Sonar")
-    print(f"Sonar URL            : {sonar_host_url}")
-    print(f"Sonar Project       : {sonar_project_key}")
+    print(f"Sonar URL          : {sonar_host_url}")
+    print(f"Sonar Project      : {sonar_project_key}")
     print("Sonar Token         : ********")
 
     print("")
@@ -693,12 +693,12 @@ def main() -> None:
         f"Nexus                : "
         f"{'configured' if nexus_url else 'not configured'}"
     )
-    print(f"Nexus Repository     : {nexus_repository}")
+    print(f"Nexus Repository    : {nexus_repository}")
 
     print("")
     print("SCM")
-    print(f"SCM Provider         : {scm_provider}")
-    print(f"SCM Organization     : {scm_org_user}")
+    print(f"SCM Provider        : {scm_provider}")
+    print(f"SCM Organization    : {scm_org_user}")
     print(f"SCM Visibility      : {scm_visibility}")
     print(f"Minimum Approvals   : {scm_min_approvals}")
 
