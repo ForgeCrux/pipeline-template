@@ -193,9 +193,9 @@ jobs:
 
       - name: Show Resolved CICD Configuration
         env:
-          KONNECT_ADDR: ${{ steps.cicd-config.outputs.konnect_addr }}
-          CONTROL_PLANE_NAME: ${{ steps.cicd-config.outputs.control_plane_name }}
-          DECK_MODE: ${{ steps.cicd-config.outputs.deck_mode }}
+          KONNECT_ADDR: ${{ steps.cicd-config.outputs.kong_host_url }}
+          CONTROL_PLANE_NAME: ${{ steps.cicd-config.outputs.kong_control_plane }}
+          DECK_MODE: ${{ steps.cicd-config.outputs.kong_deck_mode }}
           KONNECT_PAT: ${{ steps.cicd-config.outputs.kong_pat_token }}
         run: |
           echo "Resolved Kong CICD configuration:"
@@ -211,9 +211,9 @@ jobs:
               konnect_pat: $konnect_pat
             }'
           echo "konnect_pat=${KONNECT_PAT:-<not configured>}"  
-          echo "konnect_addr=${KONNECT_ADDR:-<not configured>}"
-          echo "control_plane_name=${CONTROL_PLANE_NAME:-<not configured>}"
-          echo "deck_mode=${DECK_MODE:-<not configured>}"
+          echo "kong_host_url=${KONNECT_ADDR:-<not configured>}"
+          echo "kong_control_plane=${CONTROL_PLANE_NAME:-<not configured>}"
+          echo "kong_deck_mode=${DECK_MODE:-<not configured>}"
 
       #######################################################
       # Install decK
@@ -247,17 +247,18 @@ jobs:
           INPUT_CONTROL_PLANE: ${{ inputs.control_plane_name }}
           INPUT_DECK_MODE: ${{ inputs.deck_mode }}
 
-          CONFIG_KONNECT_ADDR: ${{ steps.cicd-config.outputs.konnect_addr }}
-          CONFIG_CONTROL_PLANE: ${{ steps.cicd-config.outputs.control_plane_name }}
+          CONFIG_KONNECT_ADDR: ${{ steps.cicd-config.outputs.kong_host_url }}
+          CONFIG_CONTROL_PLANE: ${{ steps.cicd-config.outputs.kong_control_plane }}
           CONFIG_DECK_MODE: ${{ steps.cicd-config.outputs.deck_mode }}
           CONFIG_KONNECT_PAT: ${{ steps.cicd-config.outputs.kong_pat_token }}
         run: |
           set -euo pipefail
 
           # Explicit workflow inputs take precedence.
-          KONNECT_ADDR="${INPUT_KONNECT_ADDR}"
-          CONTROL_PLANE_NAME="${INPUT_CONTROL_PLANE}"
-          DECK_MODE="${INPUT_DECK_MODE}"
+          KONNECT_ADDR="${{ steps.cicd-config.outputs.kong_host_url }}"
+          CONTROL_PLANE_NAME="${{ steps.cicd-config.outputs.kong_control_plane }}"
+          DECK_MODE="${{ steps.cicd-config.outputs.deck_mode }}"
+          KONNECT_PAT="${{ steps.cicd-config.outputs.kong_pat_token }}"
 
           if [ -n "${CONFIG_KONNECT_ADDR:-}" ] &&
              [ "${INPUT_KONNECT_ADDR}" = "https://us.api.konghq.com" ]; then
@@ -287,10 +288,11 @@ jobs:
           echo "konnect_addr=${KONNECT_ADDR}" >> "$GITHUB_OUTPUT"
           echo "control_plane_name=${CONTROL_PLANE_NAME}" >> "$GITHUB_OUTPUT"
           echo "deck_mode=${DECK_MODE}" >> "$GITHUB_OUTPUT"
-
+          echo "konnect_pat=${KONNECT_PAT}" >> "$GITHUB_OUTPUT"
           echo "KONNECT_ADDR=${KONNECT_ADDR}"
           echo "CONTROL_PLANE_NAME=${CONTROL_PLANE_NAME}"
           echo "DECK_MODE=${DECK_MODE}"
+          echo "KONNECT_PAT=${KONNECT_PAT}"
 
       #######################################################
       # Validate
@@ -299,8 +301,9 @@ jobs:
       - name: Validate Kong Configuration
         id: validate
         env:
-          KONNECT_ADDR: ${{ steps.kong-config.outputs.konnect_addr }}
-          CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
+          KONNECT_ADDR: ${{ steps.kong-config.outputs.kong_host_url }}
+          CONTROL_PLANE_NAME: ${{ steps.cicd-config.outputs.kong_control_plane }}
+          DECK_MODE: ${{ steps.cicd-config.outputs.deck_mode }}
           KONNECT_TOKEN: ${{ steps.kong-config.outputs.kong_pat_token }}
         run: |
           set -o pipefail
@@ -318,8 +321,9 @@ jobs:
 
       - name: Diff Kong Configuration
         env:
-          KONNECT_ADDR: ${{ steps.kong-config.outputs.konnect_addr }}
-          CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
+          KONNECT_ADDR: ${{ steps.kong-config.outputs.kong_host_url }}
+          CONTROL_PLANE_NAME: ${{ steps.cicd-config.outputs.kong_control_plane }}
+          DECK_MODE: ${{ steps.cicd-config.outputs.deck_mode }}
           KONNECT_TOKEN: ${{ steps.kong-config.outputs.kong_pat_token }}
         run: |
           deck gateway diff \
@@ -337,10 +341,10 @@ jobs:
         if: ${{ inputs.validate_only == false }}
         continue-on-error: true
         env:
-          KONNECT_ADDR: ${{ steps.kong-config.outputs.konnect_addr }}
-          CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
+          KONNECT_ADDR: ${{ steps.kong-config.outputs.kong_host_url }}
+          CONTROL_PLANE_NAME: ${{ steps.cicd-config.outputs.kong_control_plane }}
+          DECK_MODE: ${{ steps.cicd-config.outputs.deck_mode }}
           KONNECT_TOKEN: ${{ steps.kong-config.outputs.kong_pat_token }}
-          DECK_MODE: ${{ steps.kong-config.outputs.deck_mode }}
         run: |
           set -euo pipefail
 
@@ -376,8 +380,9 @@ jobs:
         if: ${{ inputs.validate_only == false }}
         continue-on-error: true
         env:
-          KONNECT_ADDR: ${{ steps.kong-config.outputs.konnect_addr }}
-          CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
+          KONNECT_ADDR: ${{ steps.kong-config.outputs.kong_host_url }}
+          CONTROL_PLANE_NAME: ${{ steps.cicd-config.outputs.kong_control_plane }}
+          DECK_MODE: ${{ steps.cicd-config.outputs.deck_mode }}
           KONNECT_TOKEN: ${{ steps.kong-config.outputs.kong_pat_token }}
         run: |
           deck gateway dump \
