@@ -26,7 +26,7 @@ on:
         type: string
         default: "https://forgesphere.probestack.io/cicd-automation/v1/api/cicd-config"
 
-      # Used by load_cicd_config.py to identify the deployed component.
+      # Used by load_kong_config.py to identify the deployed component.
       # For Kong this should normally be the proxy/service name.
       deploy_proxy:
         required: false
@@ -181,7 +181,7 @@ jobs:
 
           echo "CICD configuration downloaded"
 
-          python3 pipeline-template/scripts/load_cicd_config.py \
+          python3 pipeline-template/scripts/load_kong_config.py \
             "${RESPONSE_FILE}"
 
           echo "CICD configuration loaded successfully"
