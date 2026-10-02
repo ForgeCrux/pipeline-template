@@ -237,6 +237,7 @@ jobs:
           CONFIG_KONNECT_ADDR: ${{ steps.cicd-config.outputs.konnect_addr }}
           CONFIG_CONTROL_PLANE: ${{ steps.cicd-config.outputs.control_plane_name }}
           CONFIG_DECK_MODE: ${{ steps.cicd-config.outputs.deck_mode }}
+          CONFIG_KONNECT_PAT: ${{ steps.cicd-config.outputs.kong_pat_token }}
         run: |
           set -euo pipefail
 
@@ -287,7 +288,7 @@ jobs:
         env:
           KONNECT_ADDR: ${{ steps.kong-config.outputs.konnect_addr }}
           CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
-          KONNECT_TOKEN: ${{ secrets.konnect_token }}
+          KONNECT_TOKEN: ${{ steps.kong-config.outputs.kong_pat_token }}
         run: |
           set -o pipefail
 
@@ -306,7 +307,7 @@ jobs:
         env:
           KONNECT_ADDR: ${{ steps.kong-config.outputs.konnect_addr }}
           CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
-          KONNECT_TOKEN: ${{ secrets.konnect_token }}
+          KONNECT_TOKEN: ${{ steps.kong-config.outputs.kong_pat_token }}
         run: |
           deck gateway diff \
             --konnect-token "${KONNECT_TOKEN}" \
@@ -325,7 +326,7 @@ jobs:
         env:
           KONNECT_ADDR: ${{ steps.kong-config.outputs.konnect_addr }}
           CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
-          KONNECT_TOKEN: ${{ secrets.konnect_token }}
+          KONNECT_TOKEN: ${{ steps.kong-config.outputs.kong_pat_token }}
           DECK_MODE: ${{ steps.kong-config.outputs.deck_mode }}
         run: |
           set -euo pipefail
@@ -364,7 +365,7 @@ jobs:
         env:
           KONNECT_ADDR: ${{ steps.kong-config.outputs.konnect_addr }}
           CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
-          KONNECT_TOKEN: ${{ secrets.konnect_token }}
+          KONNECT_TOKEN: ${{ steps.kong-config.outputs.kong_pat_token }}
         run: |
           deck gateway dump \
             --konnect-token "${KONNECT_TOKEN}" \
