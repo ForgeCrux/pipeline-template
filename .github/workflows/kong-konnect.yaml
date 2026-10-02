@@ -198,6 +198,7 @@ jobs:
           DECK_MODE: ${{ steps.cicd-config.outputs.deck_mode }}
         run: |
           echo "Resolved Kong CICD configuration:"
+          cat ${{ steps.cicd-config.outputs }}
           echo "konnect_addr=${KONNECT_ADDR:-<not configured>}"
           echo "control_plane_name=${CONTROL_PLANE_NAME:-<not configured>}"
           echo "deck_mode=${DECK_MODE:-<not configured>}"
