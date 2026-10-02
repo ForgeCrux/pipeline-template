@@ -325,10 +325,10 @@ jobs:
 
       - name: Diff Kong Configuration
         env:
-          KONNECT_ADDR: ${{ steps.kong-config.outputs.kong_host_url }}
+          KONNECT_ADDR: ${{ steps.cicd-config.outputs.kong_host_url }}
           CONTROL_PLANE_NAME: ${{ steps.cicd-config.outputs.kong_control_plane }}
           DECK_MODE: ${{ steps.cicd-config.outputs.kong_deck_mode }}
-          KONNECT_TOKEN: ${{ steps.kong-config.outputs.kong_pat_token }}
+          KONNECT_TOKEN: ${{ steps.cicd-config.outputs.kong_pat_token }}
         run: |
           deck gateway diff \
             --konnect-token "${KONNECT_TOKEN}" \
