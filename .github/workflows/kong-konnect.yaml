@@ -179,7 +179,7 @@ jobs:
             --output "${RESPONSE_FILE}"
 
           test -s "${RESPONSE_FILE}"
-
+          cat "${RESPONSE_FILE}"
           echo "CICD configuration downloaded"
 
           python3 pipeline-template/scripts/load_kong_config.py \
