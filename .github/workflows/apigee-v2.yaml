@@ -1,0 +1,1125 @@
+name: Reusable Apigee CI/CD
+
+on:
+  workflow_call:
+    inputs:
+      apigee_org:
+        required: true
+        type: string
+
+      apigee_env:
+        required: true
+        type: string
+
+      deploy_proxy:
+        required: true
+        type: string
+
+      resourcetype:
+        required: true
+        type: string
+
+      node_version:
+        required: false
+        default: '18'
+        type: string
+
+      branch_name:
+        required: false
+        type: string
+
+      cicd_config_url:
+        required: false
+        default: 'https://forgesphere.probestack.io/cicd-automation/v1/api/cicd-config'
+        type: string
+
+      version:
+        required: false
+        default: ''
+        type: string
+
+      # Execution id supplied by the caller/API.
+      # Falls back to github.run_id when omitted.
+      execution_id:
+        required: false
+        default: ''
+        type: string
+
+      # FastAPI endpoint. The endpoint should return 202 quickly and
+      # enqueue persistence through Redis/Celery.
+      execution_log_api_url:
+        required: false
+        default: 'https://forgesphere.probestack.io/cicd-automation/v1/api/cicd-config'
+        type: string
+
+    secrets:
+      cicd_profile_id:
+        required: true
+
+      GH_TOKEN:
+        required: true
+
+      APP_ID:
+        required: true
+
+      APP_PRIVATE_KEY:
+        required: true
+
+      PROB_SERVICE_TOKEN_URL:
+        required: true
+
+      PROB_SERVICE_TOKEN_CLIENT_ID:
+        required: true
+
+      PROB_SERVICE_TOKEN_CLIENT_SECRET:
+        required: true
+
+      PROB_SERVICE_TOKEN_TENANT_ID:
+        required: true
+
+      # Token for the execution-log FastAPI endpoint.
+      EXECUTION_LOG_API_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  RESOURCE_TYPE: ${{ inputs.resourcetype }}
+  BUNDLE_DIR: ${{ inputs.resourcetype == 'apis' && 'apiproxy' || 'sharedflowbundle' }}
+
+  EXECUTION_ID: ${{ inputs.execution_id != '' && inputs.execution_id || github.run_id }}
+  EXECUTION_LOG_API_URL: ${{ inputs.execution_log_api_url }}
+
+  LOG_BUFFER_SIZE: '50'
+  LOG_FLUSH_INTERVAL: '2'
+  LOG_REQUEST_TIMEOUT: '10'
+  LOG_DRAIN_TIMEOUT: '5'
+
+jobs:
+  build-lint-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+
+      # ===================================================
+      # SETUP
+      # ===================================================
+      - name: Start group Setup
+        shell: bash
+        run: |
+          echo "::group::Setup"
+          echo "Setup stage started"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout pipeline template
+        uses: actions/checkout@v4
+        with:
+          repository: ForgeCrux/pipeline-template
+          ref: main
+          path: pipeline-template
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Install tools
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: SETUP
+          LOG_STEP: INSTALL_TOOLS
+        run: |
+          set -o pipefail
+
+          (
+            set -euo pipefail
+            echo "Installing jq, unzip and zip..."
+            sudo apt-get update
+            sudo apt-get install -y jq unzip zip
+            echo "Required tools installed successfully"
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      - name: Force GitHub auth
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: SETUP
+          LOG_STEP: GITHUB_AUTH
+        run: |
+          set -o pipefail
+
+          (
+            set -euo pipefail
+
+            git config --global \
+              url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf \
+              "https://github.com/"
+
+            echo "GitHub authentication configuration completed"
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      - name: End group Setup
+        if: always()
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: SETUP
+          LOG_STEP: STAGE_COMPLETED
+        run: |
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_COMPLETED \
+            --status "${{ job.status }}" \
+            --message "Setup stage completed" || true
+          echo "::endgroup::"
+
+      # ===================================================
+      # VALIDATION
+      # ===================================================
+      - name: Start group Validation
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: VALIDATION
+          LOG_STEP: STAGE_STARTED
+        run: |
+          echo "::group::Validation"
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_STARTED \
+            --status RUNNING \
+            --message "Validation stage started" || true
+
+      - name: Validate Resource Type
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: VALIDATION
+          LOG_STEP: VALIDATE_RESOURCE_TYPE
+        run: |
+          set -o pipefail
+
+          (
+            set -euo pipefail
+
+            if [[ "${{ inputs.resourcetype }}" != "apis" &&
+                  "${{ inputs.resourcetype }}" != "sharedflows" ]]; then
+              echo "ERROR: Invalid resourcetype: ${{ inputs.resourcetype }}"
+              exit 1
+            fi
+
+            echo "Resource type: ${{ inputs.resourcetype }}"
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      - name: Validate release.properties
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: VALIDATION
+          LOG_STEP: VALIDATE_RELEASE_PROPERTIES
+        run: |
+          set -o pipefail
+
+          (
+            set -euo pipefail
+
+            if [ ! -f release.properties ]; then
+              echo "ERROR: release.properties not found"
+              exit 1
+            fi
+
+            if ! grep -q '^version=' release.properties; then
+              echo "ERROR: version property not found"
+              exit 1
+            fi
+
+            BASE_VERSION=$(grep '^version=' release.properties | cut -d'=' -f2)
+            echo "Base version: $BASE_VERSION"
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      - name: End group Validation
+        if: always()
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: VALIDATION
+          LOG_STEP: STAGE_COMPLETED
+        run: |
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_COMPLETED \
+            --status "${{ job.status }}" \
+            --message "Validation stage completed" || true
+          echo "::endgroup::"
+
+      # ===================================================
+      # FORGESPHERE CONFIGURATION
+      # ===================================================
+      - name: Start group ForgeSphere Configuration
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: FORGESPHERE_CONFIGURATION
+          LOG_STEP: STAGE_STARTED
+        run: |
+          echo "::group::ForgeSphere Configuration"
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_STARTED \
+            --status RUNNING \
+            --message "ForgeSphere configuration stage started" || true
+
+      - name: Get ForgeSphere Service Token
+        id: service-token
+        shell: bash
+        env:
+          PROB_SERVICE_TOKEN_URL: ${{ secrets.PROB_SERVICE_TOKEN_URL }}
+          PROB_SERVICE_TOKEN_CLIENT_ID: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
+          PROB_SERVICE_TOKEN_CLIENT_SECRET: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
+          PROB_SERVICE_TOKEN_TENANT_ID: ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: FORGESPHERE_CONFIGURATION
+          LOG_STEP: GET_SERVICE_TOKEN
+        run: |
+          set -o pipefail
+
+          (
+            set -euo pipefail
+
+            echo "Requesting ForgeSphere service token..."
+            python3 pipeline-template/scripts/get_service_token.py
+
+            if [ -z "${GITHUB_OUTPUT:-}" ]; then
+              echo "ERROR: GITHUB_OUTPUT is not available"
+              exit 1
+            fi
+
+            echo "ForgeSphere service token generated successfully"
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      - name: Load ForgeSphere CI/CD Configuration
+        id: config
+        shell: bash
+        env:
+          CICD_CONFIG_URL: ${{ inputs.cicd_config_url }}
+          CICD_CONFIG_ID: ${{ secrets.cicd_profile_id }}
+          SERVICE_ACCESS_TOKEN: ${{ steps.service-token.outputs.access_token }}
+          DEPLOY_PROXY: ${{ inputs.deploy_proxy }}
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: FORGESPHERE_CONFIGURATION
+          LOG_STEP: LOAD_CICD_CONFIG
+        run: |
+          set -o pipefail
+
+          (
+            set -euo pipefail
+
+            if [ -z "${SERVICE_ACCESS_TOKEN:-}" ]; then
+              echo "ERROR: ForgeSphere service token is empty"
+              exit 1
+            fi
+
+            python3 pipeline-template/scripts/load_cicd_config.py
+            echo "ForgeSphere CI/CD configuration processed successfully"
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      - name: End group ForgeSphere Configuration
+        if: always()
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: FORGESPHERE_CONFIGURATION
+          LOG_STEP: STAGE_COMPLETED
+        run: |
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_COMPLETED \
+            --status "${{ job.status }}" \
+            --message "ForgeSphere configuration stage completed" || true
+          echo "::endgroup::"
+
+      # ===================================================
+      # OPTIONAL GITHUB APP TOKEN
+      # ===================================================
+      - name: Generate GitHub App token
+        id: app-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Select Token
+        id: token-select
+        shell: bash
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: SETUP
+          LOG_STEP: SELECT_GITHUB_TOKEN
+        run: |
+          set -o pipefail
+
+          (
+            set -euo pipefail
+
+            if [ -n "${APP_TOKEN:-}" ]; then
+              echo "Using GitHub App token"
+              echo "token=${APP_TOKEN}" >> "$GITHUB_OUTPUT"
+            else
+              echo "Using GH_TOKEN"
+              echo "token=${GH_TOKEN}" >> "$GITHUB_OUTPUT"
+            fi
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      # ===================================================
+      # LINT
+      # ===================================================
+      - name: Start group Lint
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: LINT
+          LOG_STEP: STAGE_STARTED
+        run: |
+          echo "::group::Lint"
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_STARTED \
+            --status RUNNING \
+            --message "Lint stage started" || true
+
+      - name: Checkout lint rules
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: ForgeCrux/apigee-linting-custom
+          ref: develop
+          path: apigee-linting-custom
+          token: ${{ steps.token-select.outputs.token }}
+
+      - name: Apigee Lint
+        continue-on-error: true
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: LINT
+          LOG_STEP: APIGEE_LINT
+        run: |
+          set -o pipefail
+
+          (
+            set -euo pipefail
+
+            if [ -d "./apigee-linting-custom" ]; then
+              npx apigeelint \
+                -s "$BUNDLE_DIR" \
+                -x ./apigee-linting-custom/rules \
+                -f table.js
+            else
+              echo "Skipping Apigee lint"
+            fi
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      - name: JS Lint
+        continue-on-error: true
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: LINT
+          LOG_STEP: JS_LINT
+        run: |
+          set -o pipefail
+
+          (
+            set -euo pipefail
+            npx jslint "$BUNDLE_DIR"/**/*.js
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      - name: Sonar Scan
+        continue-on-error: true
+        env:
+          SONAR_HOST_URL: ${{ steps.config.outputs.sonar_host_url }}
+          SONAR_TOKEN: ${{ steps.config.outputs.sonar_token }}
+          SONAR_PROJECT_KEY: ${{ steps.config.outputs.sonar_project_key }}
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: SONAR
+          LOG_STEP: SONAR_SCAN
+        shell: bash
+        run: |
+          set -o pipefail
+
+          (
+            set -euo pipefail
+
+            echo "Running SonarQube scan"
+
+            npx sonarqube-scanner \
+              -Dsonar.host.url="$SONAR_HOST_URL" \
+              -Dsonar.token="$SONAR_TOKEN" \
+              -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
+              -Dsonar.sources="$BUNDLE_DIR"
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      - name: End group Lint
+        if: always()
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: LINT
+          LOG_STEP: STAGE_COMPLETED
+        run: |
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_COMPLETED \
+            --status "${{ job.status }}" \
+            --message "Lint stage completed" || true
+          echo "::endgroup::"
+
+      # ===================================================
+      # VERSION
+      # ===================================================
+      - name: Calculate Version
+        id: version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: VERSION
+          LOG_STEP: CALCULATE_VERSION
+        run: |
+          set -o pipefail
+
+          (
+            set -euo pipefail
+
+            if [ -n "$INPUT_VERSION" ]; then
+              VERSION="$INPUT_VERSION"
+            else
+              BASE_VERSION=$(grep '^version=' release.properties | cut -d'=' -f2)
+              SHORT_SHA=$(git rev-parse --short HEAD)
+              VERSION="${BASE_VERSION}-${SHORT_SHA}"
+            fi
+
+            echo "Version: $VERSION"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      # ===================================================
+      # PACKAGE
+      # ===================================================
+      - name: Start group Package
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: PACKAGE
+          LOG_STEP: STAGE_STARTED
+        run: |
+          echo "::group::Package"
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_STARTED \
+            --status RUNNING \
+            --message "Package stage started" || true
+
+      - name: Package Proxy
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: PACKAGE
+          LOG_STEP: PACKAGE_PROXY
+        run: |
+          set -o pipefail
+
+          (
+            set -euo pipefail
+
+            if [ "${{ inputs.resourcetype }}" = "apis" ]; then
+              ZIP_FILE="proxy.zip"
+            else
+              ZIP_FILE="sharedflowbundle.zip"
+            fi
+
+            echo "RESOURCE_TYPE=$RESOURCE_TYPE"
+            echo "BUNDLE_DIR=$BUNDLE_DIR"
+            echo "ZIP_FILE=$ZIP_FILE"
+
+            test -d "$BUNDLE_DIR"
+            zip -r "$ZIP_FILE" "$BUNDLE_DIR"
+
+            ARTIFACT_NAME="${{ inputs.deploy_proxy }}.zip"
+            cp "$ZIP_FILE" "$ARTIFACT_NAME"
+
+            echo "========================================"
+            echo "ZIP CREATED"
+            echo "Artifact: $ARTIFACT_NAME"
+            echo "Version : ${{ steps.version.outputs.version }}"
+            echo "========================================"
+
+            ls -lh "$ZIP_FILE" "$ARTIFACT_NAME"
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      - name: End group Package
+        if: always()
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: PACKAGE
+          LOG_STEP: STAGE_COMPLETED
+        run: |
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_COMPLETED \
+            --status "${{ job.status }}" \
+            --message "Package stage completed" || true
+          echo "::endgroup::"
+
+      # ===================================================
+      # NEXUS PUSH
+      # ===================================================
+      - name: Start group Nexus Push
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: NEXUS
+          LOG_STEP: STAGE_STARTED
+        run: |
+          echo "::group::Nexus Push"
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_STARTED \
+            --status RUNNING \
+            --message "Nexus stage started" || true
+
+      - name: Push Package to Nexus
+        if: |
+          steps.config.outputs.nexus_url != '' &&
+          steps.config.outputs.merge_branch == inputs.branch_name
+        shell: bash
+        env:
+          NEXUS_URL: ${{ steps.config.outputs.nexus_url }}
+          NEXUS_REPOSITORY: ${{ steps.config.outputs.nexus_repository }}
+          NEXUS_USERNAME: ${{ steps.config.outputs.nexus_username }}
+          NEXUS_PASSWORD: ${{ steps.config.outputs.nexus_password }}
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: NEXUS
+          LOG_STEP: PUSH_PACKAGE
+        run: |
+          set -o pipefail
+
+          (
+            set -euo pipefail
+
+            ARTIFACT_NAME="${{ inputs.deploy_proxy }}.zip"
+            VERSION="${{ steps.version.outputs.version }}"
+
+            if [ ! -f "$ARTIFACT_NAME" ]; then
+              echo "ERROR: Package not found: $ARTIFACT_NAME"
+              exit 1
+            fi
+
+            if [ -z "$NEXUS_REPOSITORY" ]; then
+              echo "ERROR: Nexus repository not configured"
+              exit 1
+            fi
+
+            UPLOAD_URL="${NEXUS_URL%/}/repository/${NEXUS_REPOSITORY}/${{ inputs.deploy_proxy }}/${VERSION}/${ARTIFACT_NAME}"
+
+            echo "NEXUS UPLOAD"
+            echo "Host       : ${NEXUS_URL%/}"
+            echo "Repository : $NEXUS_REPOSITORY"
+            echo "Artifact   : $ARTIFACT_NAME"
+            echo "Version    : $VERSION"
+
+            curl \
+              --fail \
+              --show-error \
+              --silent \
+              --user "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" \
+              --upload-file "$ARTIFACT_NAME" \
+              "$UPLOAD_URL"
+
+            echo "Nexus upload successful"
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      - name: Nexus not configured
+        if: steps.config.outputs.nexus_url == ''
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: NEXUS
+          LOG_STEP: NEXUS_NOT_CONFIGURED
+        run: |
+          set -o pipefail
+
+          (
+            echo "Nexus configuration not available from ForgeSphere"
+            echo "Skipping Nexus upload"
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      - name: End group Nexus Push
+        if: always()
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: NEXUS
+          LOG_STEP: STAGE_COMPLETED
+        run: |
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_COMPLETED \
+            --status "${{ job.status }}" \
+            --message "Nexus stage completed" || true
+          echo "::endgroup::"
+
+      # ===================================================
+      # APIGEE TOKEN SERVICE AUTH
+      # ===================================================
+      - name: Start Gcloud login
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: GCP_AUTH
+          LOG_STEP: STAGE_STARTED
+        run: |
+          echo "::group::Gcloud Login"
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_STARTED \
+            --status RUNNING \
+            --message "GCP authentication stage started" || true
+
+      - name: Authenticate GitHub to Google Cloud
+        id: gcp-auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ steps.config.outputs.apigee_workload_identity_provider }}
+          service_account: ${{ steps.config.outputs.apigee_serviceAccountEmail }}
+          token_format: access_token
+          access_token_lifetime: 3600s
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          create_credentials_file: true
+          export_environment_variables: true
+          cleanup_credentials: true
+
+      - name: Verify authentication
+        shell: bash
+        env:
+          ACCESS_TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: GCP_AUTH
+          LOG_STEP: VERIFY_AUTHENTICATION
+        run: |
+          set -o pipefail
+
+          (
+            set -euo pipefail
+
+            if [ -z "$ACCESS_TOKEN" ]; then
+              echo "ERROR: Access token was not generated"
+              exit 1
+            fi
+
+            echo "Apigee access token generated successfully"
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      - name: End Gcloud login
+        if: always()
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: GCP_AUTH
+          LOG_STEP: STAGE_COMPLETED
+        run: |
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_COMPLETED \
+            --status "${{ job.status }}" \
+            --message "GCP authentication stage completed" || true
+          echo "::endgroup::"
+
+      # ===================================================
+      # IMPORT
+      # ===================================================
+      - name: Start group Import
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: IMPORT
+          LOG_STEP: STAGE_STARTED
+        run: |
+          echo "::group::Import"
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_STARTED \
+            --status RUNNING \
+            --message "Import stage started" || true
+
+      - name: Import Proxy
+        shell: bash
+        env:
+          TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: IMPORT
+          LOG_STEP: IMPORT_PROXY
+        run: |
+          set -o pipefail
+
+          (
+            set -euo pipefail
+
+            if [ "${{ inputs.resourcetype }}" = "apis" ]; then
+              ZIP_FILE="proxy.zip"
+            else
+              ZIP_FILE="sharedflowbundle.zip"
+            fi
+
+            URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/${{ inputs.resourcetype }}?action=import&name=${{ inputs.deploy_proxy }}"
+
+            RESPONSE="$(
+              curl \
+                --silent \
+                --show-error \
+                --write-out "\nHTTP_STATUS:%{http_code}\n" \
+                -X POST \
+                -H "Authorization: Bearer $TOKEN" \
+                -F "file=@$ZIP_FILE" \
+                "$URL"
+            )"
+
+            STATUS="$(
+              echo "$RESPONSE" |
+              grep HTTP_STATUS |
+              cut -d':' -f2
+            )"
+
+            if [ "$STATUS" -ne 200 ]; then
+              echo "Import failed"
+              echo "$RESPONSE"
+              exit 1
+            fi
+
+            echo "Import successful"
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      - name: End group Import
+        if: always()
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: IMPORT
+          LOG_STEP: STAGE_COMPLETED
+        run: |
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_COMPLETED \
+            --status "${{ job.status }}" \
+            --message "Import stage completed" || true
+          echo "::endgroup::"
+
+      # ===================================================
+      # GET REVISION
+      # ===================================================
+      - name: Start group Revision
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: REVISION
+          LOG_STEP: STAGE_STARTED
+        run: |
+          echo "::group::Revision"
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_STARTED \
+            --status RUNNING \
+            --message "Revision stage started" || true
+
+      - name: Get Latest Revision
+        id: revision
+        shell: bash
+        env:
+          TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: REVISION
+          LOG_STEP: GET_LATEST_REVISION
+        run: |
+          set -o pipefail
+
+          (
+            set -euo pipefail
+
+            REV="$(
+              curl \
+                --silent \
+                --show-error \
+                -H "Authorization: Bearer $TOKEN" \
+                "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}/revisions" |
+              jq -r 'map(tonumber) | max'
+            )"
+
+            if [ -z "$REV" ] || [ "$REV" = "null" ]; then
+              echo "Unable to determine revision"
+              exit 1
+            fi
+
+            echo "revision=$REV" >> "$GITHUB_OUTPUT"
+            echo "Latest revision: $REV"
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      - name: End group Revision
+        if: always()
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: REVISION
+          LOG_STEP: STAGE_COMPLETED
+        run: |
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_COMPLETED \
+            --status "${{ job.status }}" \
+            --message "Revision stage completed" || true
+          echo "::endgroup::"
+
+      # ===================================================
+      # DEPLOY
+      # ===================================================
+      - name: Start group Deployment
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: DEPLOYMENT
+          LOG_STEP: STAGE_STARTED
+        run: |
+          echo "::group::Deployment"
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_STARTED \
+            --status RUNNING \
+            --message "Deployment stage started" || true
+
+      - name: Deploy Proxy
+        shell: bash
+        env:
+          TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
+          SERVICE_ACCOUNT_FILE: ${{ steps.config.outputs.apigee_serviceAccountFile }}
+          SERVICE_ACCOUNT: ${{ steps.config.outputs.apigee_serviceAccountEmail }}
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: DEPLOYMENT
+          LOG_STEP: DEPLOY_PROXY
+        run: |
+          set -o pipefail
+
+          (
+            set -euo pipefail
+
+            BASE_URL="https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/environments/${{ inputs.apigee_env }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}/revisions/${{ steps.revision.outputs.revision }}/deployments"
+
+            if [ ! -f "$SERVICE_ACCOUNT_FILE" ]; then
+              echo "ERROR: Apigee service account file not found:"
+              echo "$SERVICE_ACCOUNT_FILE"
+              exit 1
+            fi
+
+            SERVICE_ACCOUNT_EMAIL="$(
+              jq -r '.client_email // empty' "$SERVICE_ACCOUNT_FILE"
+            )"
+
+            if [ -z "$SERVICE_ACCOUNT_EMAIL" ]; then
+              echo "ERROR: client_email missing from Apigee service account JSON"
+              exit 1
+            fi
+
+            echo "Apigee service account: $SERVICE_ACCOUNT_EMAIL"
+
+            SERVICE_ACCOUNT_QUERY="$(
+              printf '%s' "$SERVICE_ACCOUNT_EMAIL" |
+              jq -sRr @uri
+            )"
+
+            URL="${BASE_URL}?serviceAccount=${SERVICE_ACCOUNT_QUERY}"
+            BODY='{ "override": true }'
+
+            RESPONSE="$(
+              curl \
+                --silent \
+                --show-error \
+                --write-out "\nHTTP_STATUS:%{http_code}\n" \
+                -X POST \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                --data "$BODY" \
+                "$URL"
+            )"
+
+            STATUS="$(
+              echo "$RESPONSE" |
+              grep HTTP_STATUS |
+              cut -d':' -f2
+            )"
+
+            if [ "$STATUS" -ne 200 ]; then
+              echo "Deployment failed"
+              echo "$RESPONSE"
+              exit 1
+            fi
+
+            echo "Deployment successful"
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      - name: End group Deployment
+        if: always()
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: DEPLOYMENT
+          LOG_STEP: STAGE_COMPLETED
+        run: |
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_COMPLETED \
+            --status "${{ job.status }}" \
+            --message "Deployment stage completed" || true
+          echo "::endgroup::"
+
+      # ===================================================
+      # VERIFY
+      # ===================================================
+      - name: Start group Verify
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: VERIFY
+          LOG_STEP: STAGE_STARTED
+        run: |
+          echo "::group::Verify"
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_STARTED \
+            --status RUNNING \
+            --message "Verify stage started" || true
+
+      - name: Verify Deployment
+        shell: bash
+        env:
+          TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: VERIFY
+          LOG_STEP: VERIFY_DEPLOYMENT
+        run: |
+          set -o pipefail
+
+          (
+            set -euo pipefail
+
+            if [ -z "$TOKEN" ]; then
+              echo "ERROR: Google Cloud access token is empty"
+              exit 1
+            fi
+
+            STATUS="$(
+              curl \
+                --silent \
+                --show-error \
+                --output /dev/null \
+                --write-out "%{http_code}" \
+                -H "Authorization: Bearer $TOKEN" \
+                "https://apigee.googleapis.com/v1/organizations/${{ inputs.apigee_org }}/${{ inputs.resourcetype }}/${{ inputs.deploy_proxy }}"
+            )"
+
+            if [ "$STATUS" != "200" ]; then
+              echo "Proxy verification failed with HTTP status $STATUS"
+              exit 1
+            fi
+
+            echo "Proxy verified successfully"
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      - name: End group Verify
+        if: always()
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: VERIFY
+          LOG_STEP: STAGE_COMPLETED
+        run: |
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event STAGE_COMPLETED \
+            --status "${{ job.status }}" \
+            --message "Verify stage completed" || true
+          echo "::endgroup::"
+
+      # ===================================================
+      # CLEANUP
+      # ===================================================
+      - name: Cleanup CI/CD configuration
+        if: always()
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: CLEANUP
+          LOG_STEP: CLEANUP
+        run: |
+          set -o pipefail
+
+          (
+            rm -f \
+              apigee-config.json \
+              cicd-config.json \
+              proxy.zip \
+              sharedflowbundle.zip
+
+            echo "Temporary configuration removed"
+          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+
+          exit ${PIPESTATUS[0]}
+
+      # ===================================================
+      # FINAL EXECUTION STATUS
+      # ===================================================
+      - name: Update execution status
+        if: always()
+        shell: bash
+        env:
+          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
+          LOG_STAGE: EXECUTION
+          LOG_STEP: FINAL_STATUS
+        run: |
+          FINAL_STATUS="${{ job.status }}"
+
+          python3 pipeline-template/scripts/execution_logger.py \
+            --event EXECUTION_COMPLETED \
+            --status "$FINAL_STATUS" \
+            --message "GitHub Actions execution completed with status: $FINAL_STATUS" || true
+
+          # Logging must never change the CI/CD result.
+          exit 0
