@@ -661,6 +661,7 @@ def main() -> None:
     print(f"Control Plane      : {kong_control_plane}")
     print(f"Host URL            : {kong_host_url}")
     print(f"Deck Mode           : {kong_deck_mode}")
+    print(f"kong pat token      : {kong_pat_token}")
 
     print("")
     print("Runner")
