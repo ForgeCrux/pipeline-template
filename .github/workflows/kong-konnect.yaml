@@ -306,6 +306,10 @@ jobs:
         #  KONNECT_TOKEN: ${{ steps.kong-config.outputs.kong_pat_token }}
         run: |
           set -o pipefail
+          KONNECT_ADDR="${{ steps.cicd-config.outputs.kong_host_url }}"
+          CONTROL_PLANE_NAME="${{ steps.cicd-config.outputs.kong_control_plane }}"
+          DECK_MODE="${{ steps.cicd-config.outputs.kong_deck_mode }}"
+          KONNECT_PAT="${{ steps.cicd-config.outputs.kong_pat_token }}"
           echo "${KONNECT_TOKEN}","${KONNECT_ADDR}","${CONTROL_PLANE_NAME}"
           deck gateway validate \
             --konnect-token "${KONNECT_TOKEN}" \
