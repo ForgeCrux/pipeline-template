@@ -196,11 +196,11 @@ jobs:
           KONNECT_ADDR: ${{ steps.cicd-config.outputs.kong_host_url }}
           CONTROL_PLANE_NAME: ${{ steps.cicd-config.outputs.kong_control_plane }}
           DECK_MODE: ${{ steps.cicd-config.outputs.kong_deck_mode }}
-          KONNECT_PAT: ${{ steps.cicd-config.outputs.kong_pat_token }}
+          KONNECT_TOKEN: ${{ steps.cicd-config.outputs.kong_pat_token }}
         run: |
           echo "Resolved Kong CICD configuration:"
           #jq -n \
-          #  --arg konnect_pat "$KONNECT_PAT" \
+          #  --arg konnect_pat "$KONNECT_TOKEN" \
           #  --arg konnect_addr "$KONNECT_ADDR" \
           #  --arg control_plane_name "$CONTROL_PLANE_NAME" \
           #  --arg deck_mode "$DECK_MODE" \
@@ -210,7 +210,7 @@ jobs:
           #    deck_mode: $deck_mode,
           #    konnect_pat: $konnect_pat
           #  }'
-          #echo "konnect_pat=${KONNECT_PAT:-<not configured>}"  
+          #echo "konnect_pat=${KONNECT_TOKEN:-<not configured>}"  
           echo "kong_host_url=${KONNECT_ADDR:-<not configured>}"
           echo "kong_control_plane=${CONTROL_PLANE_NAME:-<not configured>}"
           echo "kong_deck_mode=${DECK_MODE:-<not configured>}"
@@ -258,7 +258,7 @@ jobs:
           KONNECT_ADDR="${{ steps.cicd-config.outputs.kong_host_url }}"
           CONTROL_PLANE_NAME="${{ steps.cicd-config.outputs.kong_control_plane }}"
           DECK_MODE="${{ steps.cicd-config.outputs.kong_deck_mode }}"
-          KONNECT_PAT="${{ steps.cicd-config.outputs.kong_pat_token }}"
+          KONNECT_TOKEN="${{ steps.cicd-config.outputs.kong_pat_token }}"
 
           if [ -n "${CONFIG_KONNECT_ADDR:-}" ] &&
              [ "${INPUT_KONNECT_ADDR}" = "https://us.api.konghq.com" ]; then
@@ -288,7 +288,7 @@ jobs:
           echo "konnect_addr=${KONNECT_ADDR}" >> "$GITHUB_OUTPUT"
           echo "control_plane_name=${CONTROL_PLANE_NAME}" >> "$GITHUB_OUTPUT"
           echo "deck_mode=${DECK_MODE}" >> "$GITHUB_OUTPUT"
-          echo "KONNECT_PAT=${KONNECT_PAT}" >> "$GITHUB_OUTPUT"
+          echo "KONNECT_TOKEN=${KONNECT_TOKEN}" >> "$GITHUB_OUTPUT"
           echo "KONNECT_ADDR=${KONNECT_ADDR}"
           echo "CONTROL_PLANE_NAME=${CONTROL_PLANE_NAME}"
           echo "DECK_MODE=${DECK_MODE}"          
@@ -302,7 +302,7 @@ jobs:
           KONNECT_ADDR: ${{ steps.cicd-config.outputs.kong_host_url }}
           CONTROL_PLANE_NAME: ${{ steps.cicd-config.outputs.kong_control_plane }}
           DECK_MODE: ${{ steps.cicd-config.outputs.kong_deck_mode }}
-          KONNECT_PAT: ${{ steps.cicd-config.outputs.kong_pat_token }}
+          KONNECT_TOKEN: ${{ steps.cicd-config.outputs.kong_pat_token }}
         run: |
           set -o pipefail
       
