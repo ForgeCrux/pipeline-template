@@ -579,7 +579,7 @@ def main() -> None:
     # MASK SECRETS
     # --------------------------------------------------------
 
-    mask(kong_pat_token)
+    #mask(kong_pat_token)
     mask(kong_pat)
     mask(sonar_token)
     mask(nexus_password)
