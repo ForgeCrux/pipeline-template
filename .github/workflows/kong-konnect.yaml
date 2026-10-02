@@ -39,7 +39,7 @@ on:
         default: "1.62.1"
 
       validate_only:
-        required: false
+        required: true
         type: boolean
         default: false
 
