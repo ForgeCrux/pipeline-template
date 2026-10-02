@@ -196,9 +196,21 @@ jobs:
           KONNECT_ADDR: ${{ steps.cicd-config.outputs.konnect_addr }}
           CONTROL_PLANE_NAME: ${{ steps.cicd-config.outputs.control_plane_name }}
           DECK_MODE: ${{ steps.cicd-config.outputs.deck_mode }}
+          KONNECT_PAT: ${{ steps.cicd-config.outputs.kong_pat_token }}
         run: |
           echo "Resolved Kong CICD configuration:"
-          cat ${{ steps.cicd-config.outputs }}
+          jq -n \
+            --arg konnect_pat "$KONNECT_PAT" \
+            --arg konnect_addr "$KONNECT_ADDR" \
+            --arg control_plane_name "$CONTROL_PLANE_NAME" \
+            --arg deck_mode "$DECK_MODE" \
+            '{
+              konnect_addr: $konnect_addr,
+              control_plane_name: $control_plane_name,
+              deck_mode: $deck_mode,
+              konnect_pat: $konnect_pat
+            }'
+          echo "konnect_pat=${KONNECT_PAT:-<not configured>}"  
           echo "konnect_addr=${KONNECT_ADDR:-<not configured>}"
           echo "control_plane_name=${CONTROL_PLANE_NAME:-<not configured>}"
           echo "deck_mode=${DECK_MODE:-<not configured>}"
