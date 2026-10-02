@@ -1,0 +1,549 @@
+name: Reusable Microservice CI/CD Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        description: 'Microservice name'
+        required: true
+        type: string
+      k8s_namespace:
+        description: 'Kubernetes namespace'
+        required: true
+        type: string
+      k8s_cluster:
+        description: 'Target GKE cluster name'
+        required: true
+        type: string
+      deploy_strategy:
+        description: "'helm' or 'kustomize'"
+        required: true
+        type: string
+      node_version:
+        description: 'Node version'
+        required: false
+        type: string
+        default: '18'
+      dockerfile_path:
+        description: 'Dockerfile path'
+        required: false
+        type: string
+        default: './Dockerfile'
+      helm_chart_path:
+        description: 'Helm chart path'
+        required: false
+        type: string
+        default: './charts'
+      kustomize_path:
+        description: 'Kustomize overlays path'
+        required: false
+        type: string
+        default: './k8s/overlays'
+      helm_values_file:
+        description: 'Custom values file for Helm'
+        required: false
+        type: string
+        default: ''
+      replica_count:
+        description: 'Number of pod replicas'
+        required: false
+        type: string
+        default: '2'
+      health_check_path:
+        description: 'Health check path'
+        required: false
+        type: string
+        default: '/health'
+      health_check_timeout:
+        description: 'Health check timeout in seconds'
+        required: false
+        type: string
+        default: '120'
+      branch_name:
+        description: 'Branch name'
+        required: false
+        type: string
+      version:
+        description: 'Version override'
+        required: false
+        type: string
+        default: ''
+      cicd_config_url:
+        description: 'CI/CD configuration API URL'
+        required: false
+        type: string
+        default: 'https://forgesphere.probestack.io/cicd-automation/v1/api/cicd-config'
+
+    secrets:
+      cicd_profile_id:
+        required: true
+      GH_TOKEN:
+        required: true
+      APP_ID:
+        required: true
+      APP_PRIVATE_KEY:
+        required: true
+      PROB_SERVICE_TOKEN_URL:
+        required: true
+      PROB_SERVICE_TOKEN_CLIENT_ID:
+        required: true
+      PROB_SERVICE_TOKEN_CLIENT_SECRET:
+        required: true
+      PROB_SERVICE_TOKEN_TENANT_ID:
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  DEPLOY_STRATEGY: ${{ inputs.deploy_strategy }}
+  SERVICE_NAME: ${{ inputs.service_name }}
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy Microservice
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      # =========================================================
+      # 1. SETUP
+      # =========================================================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout pipeline-template
+        uses: actions/checkout@v4
+        with:
+          repository: ForgeCrux/pipeline-template
+          ref: main
+          path: pipeline-template
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Install Tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Install System Tools"
+          sudo apt-get update
+          sudo apt-get install -y jq unzip zip curl gettext-base yamllint
+          echo "::endgroup::"
+          
+          echo "::group::Install Kubernetes Tools"
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+          
+          curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+          chmod 700 get_helm.sh
+          ./get_helm.sh
+          
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+          echo "::endgroup::"
+
+          echo "::group::Install Hadolint"
+          wget -qO /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+          chmod +x /usr/local/bin/hadolint
+          echo "::endgroup::"
+
+      - name: Force GitHub auth
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Configure Git"
+          git config --global url."https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          echo "::endgroup::"
+
+      # =========================================================
+      # 2. VALIDATION
+      # =========================================================
+      - name: Validate Inputs & Structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Validate Strategy"
+          if [[ "${{ inputs.deploy_strategy }}" != "helm" && "${{ inputs.deploy_strategy }}" != "kustomize" ]]; then
+            echo "Error: deploy_strategy must be either 'helm' or 'kustomize'"
+            exit 1
+          fi
+          echo "Strategy validation passed: ${{ inputs.deploy_strategy }}"
+          echo "::endgroup::"
+
+          echo "::group::Validate Dockerfile"
+          if [ ! -f "${{ inputs.dockerfile_path }}" ]; then
+            echo "Error: Dockerfile not found at ${{ inputs.dockerfile_path }}"
+            exit 1
+          fi
+          echo "Dockerfile validation passed."
+          echo "::endgroup::"
+
+          echo "::group::Validate Deployment Manifests"
+          if [[ "${{ inputs.deploy_strategy }}" == "helm" ]]; then
+            if [ ! -f "${{ inputs.helm_chart_path }}/Chart.yaml" ]; then
+              echo "Error: Helm Chart.yaml not found at ${{ inputs.helm_chart_path }}/Chart.yaml"
+              exit 1
+            fi
+          elif [[ "${{ inputs.deploy_strategy }}" == "kustomize" ]]; then
+            if [ ! -f "${{ inputs.kustomize_path }}/kustomization.yaml" ]; then
+              echo "Error: kustomization.yaml not found at ${{ inputs.kustomize_path }}/kustomization.yaml"
+              exit 1
+            fi
+          fi
+          echo "Manifest validation passed."
+          echo "::endgroup::"
+
+          echo "::group::Validate release.properties"
+          if [ -f "release.properties" ]; then
+            if ! grep -q "^version=" release.properties; then
+               echo "Warning: version= field not found in release.properties"
+            else
+               echo "release.properties version check passed."
+            fi
+          else
+            echo "Warning: release.properties not found."
+          fi
+          echo "::endgroup::"
+
+      # =========================================================
+      # 3. FORGESPHERE CONFIGURATION
+      # =========================================================
+      - name: Get ForgeSphere Service Token
+        id: service-token
+        shell: bash
+        env:
+          PROB_SERVICE_TOKEN_URL: ${{ secrets.PROB_SERVICE_TOKEN_URL }}
+          PROB_SERVICE_TOKEN_CLIENT_ID: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
+          PROB_SERVICE_TOKEN_CLIENT_SECRET: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
+          PROB_SERVICE_TOKEN_TENANT_ID: ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
+        run: |
+          set -euo pipefail
+          echo "::group::Fetch Service Token"
+          python pipeline-template/scripts/get_service_token.py
+          echo "::endgroup::"
+
+      - name: Load ForgeSphere CI/CD Configuration
+        id: config
+        shell: bash
+        env:
+          CICD_PROFILE_ID: ${{ secrets.cicd_profile_id }}
+          CICD_CONFIG_URL: ${{ inputs.cicd_config_url }}
+          SERVICE_TOKEN: ${{ steps.service-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          echo "::group::Fetch Configuration"
+          python pipeline-template/scripts/load_cicd_config.py
+          echo "::endgroup::"
+
+      # =========================================================
+      # 4. GITHUB APP TOKEN
+      # =========================================================
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Select Token
+        id: token-select
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Determine Git Token"
+          if [[ -n "${{ steps.app-token.outputs.token }}" ]]; then
+            echo "Using GitHub App token"
+            echo "token=${{ steps.app-token.outputs.token }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "Using fallback PAT"
+            echo "token=${{ secrets.GH_TOKEN }}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "::endgroup::"
+
+      # =========================================================
+      # 5. LINT
+      # =========================================================
+      - name: Dockerfile Lint
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Hadolint Dockerfile"
+          hadolint ${{ inputs.dockerfile_path }}
+          echo "::endgroup::"
+
+      - name: Helm Lint
+        if: ${{ inputs.deploy_strategy == 'helm' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Helm Lint"
+          helm lint ${{ inputs.helm_chart_path }}
+          echo "::endgroup::"
+
+      - name: Kustomize Validate
+        if: ${{ inputs.deploy_strategy == 'kustomize' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Kustomize Build & Validate"
+          kustomize build ${{ inputs.kustomize_path }} > kustomize_output.yaml
+          # Basic syntax check
+          yamllint kustomize_output.yaml || true
+          echo "::endgroup::"
+
+      - name: YAML Lint
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Yamllint Configuration Files"
+          yamllint .github/workflows/ || true
+          echo "::endgroup::"
+
+      # =========================================================
+      # 6. SONAR
+      # =========================================================
+      - name: SonarQube Scan
+        continue-on-error: true
+        shell: bash
+        env:
+          SONAR_HOST_URL: ${{ steps.config.outputs.sonar_host_url }}
+          SONAR_TOKEN: ${{ steps.config.outputs.sonar_token }}
+          SONAR_PROJECT_KEY: ${{ steps.config.outputs.sonar_project_key }}
+        run: |
+          set -euo pipefail
+          echo "::group::Run SonarScanner"
+          if [[ -n "$SONAR_HOST_URL" && -n "$SONAR_TOKEN" && -n "$SONAR_PROJECT_KEY" ]]; then
+            # Assuming sonar-scanner is available or using docker
+            docker run \
+                --rm \
+                -e SONAR_HOST_URL="${SONAR_HOST_URL}" \
+                -e SONAR_TOKEN="${SONAR_TOKEN}" \
+                -v "${GITHUB_WORKSPACE}:/usr/src" \
+                sonarsource/sonar-scanner-cli \
+                -Dsonar.projectKey="${SONAR_PROJECT_KEY}"
+          else
+            echo "Sonar configuration missing, skipping scan."
+          fi
+          echo "::endgroup::"
+
+      # =========================================================
+      # 7. VERSION
+      # =========================================================
+      - name: Calculate Version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Determine Version"
+          if [[ -n "${{ inputs.version }}" ]]; then
+            CALC_VERSION="${{ inputs.version }}"
+          elif [ -f "release.properties" ] && grep -q "^version=" release.properties; then
+            BASE_VERSION=$(grep "^version=" release.properties | cut -d'=' -f2)
+            SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
+            CALC_VERSION="${BASE_VERSION}-${SHORT_SHA}"
+          else
+            SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
+            CALC_VERSION="0.0.0-${SHORT_SHA}"
+          fi
+          echo "Version determined: $CALC_VERSION"
+          echo "version=$CALC_VERSION" >> "$GITHUB_OUTPUT"
+          echo "::endgroup::"
+
+      # =========================================================
+      # 8. BUILD & PUSH
+      # =========================================================
+      - name: Build and Push Docker Image
+        id: build
+        shell: bash
+        env:
+          REGISTRY_URL: ${{ steps.config.outputs.registry_url }}
+          REGISTRY_USERNAME: ${{ steps.config.outputs.registry_username }}
+          REGISTRY_PASSWORD: ${{ steps.config.outputs.registry_password }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SERVICE: ${{ inputs.service_name }}
+        run: |
+          set -euo pipefail
+          echo "::group::Docker Login"
+          if [[ -n "$REGISTRY_URL" && -n "$REGISTRY_USERNAME" && -n "$REGISTRY_PASSWORD" ]]; then
+             echo "$REGISTRY_PASSWORD" | docker login "$REGISTRY_URL" -u "$REGISTRY_USERNAME" --password-stdin
+          else
+             echo "Registry credentials missing. Will attempt to build without push."
+          fi
+          echo "::endgroup::"
+
+          echo "::group::Docker Build"
+          IMAGE_NAME="${REGISTRY_URL}/${SERVICE}"
+          
+          docker build \
+            --label "version=${VERSION}" \
+            --label "service=${SERVICE}" \
+            --label "commit=${GITHUB_SHA}" \
+            -t "${IMAGE_NAME}:${VERSION}" \
+            -t "${IMAGE_NAME}:latest" \
+            -f "${{ inputs.dockerfile_path }}" .
+          echo "::endgroup::"
+
+          echo "::group::Docker Push"
+          if [[ -n "$REGISTRY_URL" ]]; then
+            docker push "${IMAGE_NAME}:${VERSION}"
+            docker push "${IMAGE_NAME}:latest"
+            echo "image_tag=${IMAGE_NAME}:${VERSION}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "::endgroup::"
+
+      # =========================================================
+      # 9. NEXUS PUSH
+      # =========================================================
+      - name: Nexus Push
+        if: ${{ steps.config.outputs.nexus_url != '' && steps.config.outputs.merge_branch == inputs.branch_name }}
+        shell: bash
+        env:
+          NEXUS_URL: ${{ steps.config.outputs.nexus_url }}
+          NEXUS_USERNAME: ${{ steps.config.outputs.nexus_username }}
+          NEXUS_PASSWORD: ${{ steps.config.outputs.nexus_password }}
+          IMAGE_TAG: ${{ steps.build.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          echo "::group::Push artifact to Nexus"
+          TAR_FILE="${{ inputs.service_name }}-${{ steps.version.outputs.version }}.tar.gz"
+          docker save "$IMAGE_TAG" | gzip > "$TAR_FILE"
+          
+          curl -v -u "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" \
+               --upload-file "$TAR_FILE" \
+               "${NEXUS_URL}/${TAR_FILE}"
+          echo "::endgroup::"
+
+      # =========================================================
+      # 10. GCP / GKE AUTHENTICATION
+      # =========================================================
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ steps.config.outputs.workload_identity_provider }}
+          service_account: ${{ steps.config.outputs.service_account }}
+
+      - name: Verify GCP Token
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Verify GCP Auth"
+          gcloud auth list
+          echo "::endgroup::"
+
+      - name: Get GKE Credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ inputs.k8s_cluster }}
+          location: ${{ steps.config.outputs.gke_location }}
+
+      - name: Verify Kubectl Access
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Verify Kubectl and Namespace"
+          kubectl cluster-info
+          kubectl get namespace ${{ inputs.k8s_namespace }} || kubectl create namespace ${{ inputs.k8s_namespace }}
+          echo "::endgroup::"
+
+      # =========================================================
+      # 11. DEPLOY
+      # =========================================================
+      - name: Deploy
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          IMAGE_REPO: ${{ steps.config.outputs.registry_url }}/${{ inputs.service_name }}
+        run: |
+          set -euo pipefail
+          echo "::group::Deploy Workloads"
+          if [[ "${{ inputs.deploy_strategy }}" == "helm" ]]; then
+            HELM_CMD="helm upgrade --install ${{ inputs.service_name }} ${{ inputs.helm_chart_path }} \
+              --namespace ${{ inputs.k8s_namespace }} \
+              --create-namespace \
+              --set image.repository=${IMAGE_REPO} \
+              --set image.tag=${VERSION} \
+              --set metadata.version=${VERSION} \
+              --set metadata.commit=${GITHUB_SHA} \
+              --set replicas=${{ inputs.replica_count }} \
+              --wait --timeout 300s"
+              
+            if [[ -n "${{ inputs.helm_values_file }}" ]]; then
+              HELM_CMD="$HELM_CMD -f ${{ inputs.helm_values_file }}"
+            fi
+            
+            eval $HELM_CMD
+            
+          elif [[ "${{ inputs.deploy_strategy }}" == "kustomize" ]]; then
+            cd ${{ inputs.kustomize_path }}
+            kustomize edit set image ms-image=${IMAGE_REPO}:${VERSION}
+            kustomize build . | kubectl apply -n ${{ inputs.k8s_namespace }} -f -
+            cd -
+          fi
+          echo "::endgroup::"
+
+      # =========================================================
+      # 12. VERIFY
+      # =========================================================
+      - name: Verify Deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Rollout Status"
+          kubectl rollout status deployment/${{ inputs.service_name }} -n ${{ inputs.k8s_namespace }} --timeout=300s
+          echo "::endgroup::"
+          
+          echo "::group::Health Check Loop"
+          TIMEOUT=${{ inputs.health_check_timeout }}
+          END_TIME=$((SECONDS + TIMEOUT))
+          
+          # Start port-forward in background
+          kubectl port-forward service/${{ inputs.service_name }} -n ${{ inputs.k8s_namespace }} 8080:80 &
+          PF_PID=$!
+          
+          SUCCESS=0
+          while [ $SECONDS -lt $END_TIME ]; do
+            if curl -s -f http://localhost:8080${{ inputs.health_check_path }}; then
+              echo "Health check passed!"
+              SUCCESS=1
+              break
+            fi
+            echo "Waiting for health check..."
+            sleep 5
+          done
+          
+          kill $PF_PID || true
+          
+          if [ $SUCCESS -eq 0 ]; then
+             echo "Health check failed after ${TIMEOUT} seconds"
+             exit 1
+          fi
+          echo "::endgroup::"
+          
+          echo "::group::Pod Status"
+          kubectl get pods -n ${{ inputs.k8s_namespace }} -l app=${{ inputs.service_name }}
+          echo "::endgroup::"
+
+      # =========================================================
+      # 13. CLEANUP
+      # =========================================================
+      - name: Cleanup
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::Cleanup Workspace"
+          rm -f cicd-config.json k8s-config.json || true
+          docker logout ${{ steps.config.outputs.registry_url }} || true
+          echo "::endgroup::"
