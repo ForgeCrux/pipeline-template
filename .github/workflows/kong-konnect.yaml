@@ -399,6 +399,122 @@ jobs:
 
           cat kong-state.json
 
+      ########################################################
+      # Generate artifact version
+      ########################################################
+    
+      - name: Generate Artifact Version
+        id: artifact-version
+        if: ${{ inputs.validate_only == false }}
+        env:
+          INPUT_VERSION: ${{ inputs.artifact_version }}
+        run: |
+          set -euo pipefail
+    
+          if [ -n "${INPUT_VERSION}" ]; then
+            VERSION="${INPUT_VERSION}"
+          else
+            VERSION="$(date -u +%Y.%m.%d.%H%M%S)-${GITHUB_SHA::7}"
+          fi
+    
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+    
+          echo "Artifact version: ${VERSION}"
+    
+    
+      ########################################################
+      # Package Nexus artifact
+      ########################################################
+    
+      - name: Package Kong Nexus Artifact
+        id: package
+        if: ${{ inputs.validate_only == false }}
+        env:
+          ARTIFACT_VERSION: ${{ steps.artifact-version.outputs.version }}
+          CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
+          DEPLOY_PROXY: ${{ inputs.deploy_proxy }}
+        run: |
+          set -euo pipefail
+    
+          mkdir -p nexus-artifact
+    
+          cp kong-state.json nexus-artifact/
+    
+          cat > nexus-artifact/metadata.json <<EOF
+          {
+            "artifactType": "kong-konnect",
+            "deployProxy": "${DEPLOY_PROXY}",
+            "controlPlane": "${CONTROL_PLANE_NAME}",
+            "version": "${ARTIFACT_VERSION}",
+            "githubRepository": "${GITHUB_REPOSITORY}",
+            "githubRunId": "${GITHUB_RUN_ID}",
+            "githubSha": "${GITHUB_SHA}",
+            "createdAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+    
+          tar -czf \
+            "kong-${DEPLOY_PROXY}-${ARTIFACT_VERSION}.tar.gz" \
+            -C nexus-artifact \
+            kong-state.json metadata.json
+    
+          sha256sum \
+            "kong-${DEPLOY_PROXY}-${ARTIFACT_VERSION}.tar.gz" \
+            > "kong-${DEPLOY_PROXY}-${ARTIFACT_VERSION}.sha256"
+    
+          ls -lh \
+            "kong-${DEPLOY_PROXY}-${ARTIFACT_VERSION}.tar.gz" \
+            "kong-${DEPLOY_PROXY}-${ARTIFACT_VERSION}.sha256"
+    
+    
+      ########################################################
+      # Upload artifact to Nexus
+      ########################################################
+    
+      - name: Upload Kong Artifact to Nexus
+        id: nexus-upload
+        if: ${{ inputs.validate_only == false }}
+        env:
+          NEXUS_URL: ${{ secrets.NEXUS_URL }}
+          NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+          NEXUS_REPOSITORY: ${{ inputs.nexus_repository }}
+          ARTIFACT_VERSION: ${{ steps.artifact-version.outputs.version }}
+          DEPLOY_PROXY: ${{ inputs.deploy_proxy }}
+        run: |
+          set -euo pipefail
+    
+          ARTIFACT="kong-${DEPLOY_PROXY}-${ARTIFACT_VERSION}.tar.gz"
+          CHECKSUM="${ARTIFACT}.sha256"
+    
+          BASE_URL="${NEXUS_URL%/}/${NEXUS_REPOSITORY}/kong/${DEPLOY_PROXY}/${ARTIFACT_VERSION}"
+    
+          echo "Uploading Kong artifact"
+          echo "Repository: ${NEXUS_REPOSITORY}"
+          echo "Proxy: ${DEPLOY_PROXY}"
+          echo "Version: ${ARTIFACT_VERSION}"
+    
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --user "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" \
+            --upload-file "${ARTIFACT}" \
+            "${BASE_URL}/${ARTIFACT}"
+    
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --user "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" \
+            --upload-file "${CHECKSUM}" \
+            "${BASE_URL}/${CHECKSUM}"
+    
+          echo "Nexus upload successful"
+    
+          echo "artifact_url=${BASE_URL}/${ARTIFACT}" >> "$GITHUB_OUTPUT"
+
+
       #######################################################
       # Report result to migration service
       #######################################################
