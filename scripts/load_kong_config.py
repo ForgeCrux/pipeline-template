@@ -565,10 +565,10 @@ def main() -> None:
         "",
     )
 
-    kong_control_plane_id = kong_details.get(
-        "controlPlaneId",
-        "",
-    )
+    #kong_control_plane_id = kong_details.get(
+    #    "controlPlaneId",
+    #    "",
+    #)
 
     kong_pat = kong_details.get(
         "pat",
@@ -632,9 +632,8 @@ def main() -> None:
         "kong_deck_mode": kong_deck_mode,
 
         # Kong details
-        "kong_region": kong_region,
-        "kong_control_plane_id": kong_control_plane_id,
-        "kong_pat": kong_pat,
+        #"kong_region": kong_region,
+        #"kong_control_plane_id": kong_control_plane_id,
     }
 
     write_outputs(
