@@ -66,7 +66,11 @@ on:
         required: false
         type: string
         default: ""
-
+      
+      branch_name:
+        required: false
+        type: string
+        
     secrets:
       cicd_profile_id:
         required: true
@@ -405,12 +409,10 @@ jobs:
     
       - name: Generate Artifact Version
         id: artifact-version
-        if: ${{ inputs.validate_only == false }}
-        env:
-          INPUT_VERSION: ${{ inputs.artifact_version }}
+        #if: ${{ steps.cicd-config.outputs.nexus_url }} != '' &&  ${{ steps.cicd-config.outputs.merge_branch }} == inputs.branch_name
         run: |
           set -euo pipefail
-    
+          cat 
           if [ -n "${INPUT_VERSION}" ]; then
             VERSION="${INPUT_VERSION}"
           else
@@ -428,16 +430,14 @@ jobs:
     
       - name: Package Kong Nexus Artifact
         id: package
-        if: ${{ inputs.validate_only == false }}
+        #if: ${{ steps.cicd-config.outputs.nexus_url }} != '' &&  ${{ steps.cicd-config.outputs.merge_branch }} == inputs.branch_name
         env:
           ARTIFACT_VERSION: ${{ steps.artifact-version.outputs.version }}
           CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
           DEPLOY_PROXY: ${{ inputs.deploy_proxy }}
         run: |
           set -euo pipefail
-    
           mkdir -p nexus-artifact
-    
           cp kong-state.json nexus-artifact/
     
           cat > nexus-artifact/metadata.json <<EOF
