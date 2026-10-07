@@ -78,8 +78,8 @@ on:
         required: true
 
       # Token for the execution-log FastAPI endpoint.
-      EXECUTION_LOG_API_TOKEN:
-        required: true
+      #EXECUTION_LOG_API_TOKEN:
+      #  required: true
 
       PIPELINE_LOGS_URL:
         required: false
