@@ -81,6 +81,21 @@ on:
       EXECUTION_LOG_API_TOKEN:
         required: true
 
+      PIPELINE_LOGS_URL:
+        required: false
+
+      TOKEN_ISSUER_URL:
+        required: false
+
+      PIPELINE_LOGS_CLIENT_ID:
+        required: false
+
+      PIPELINE_LOGS_CLIENT_SECRET:
+        required: false
+
+      ORGANIZATION_ID:
+        required: false
+
 permissions:
   contents: read
 
@@ -96,6 +111,15 @@ env:
   LOG_REQUEST_TIMEOUT: '10'
   LOG_DRAIN_TIMEOUT: '5'
 
+  # Async pipeline log streaming
+  PIPELINE_LOGS_URL: ${{ secrets.PIPELINE_LOGS_URL }}
+  TOKEN_ISSUER_URL: ${{ secrets.TOKEN_ISSUER_URL }}
+  CLIENT_ID: ${{ secrets.PIPELINE_LOGS_CLIENT_ID }}
+  CLIENT_SECRET: ${{ secrets.PIPELINE_LOGS_CLIENT_SECRET }}
+  ORGANIZATION_ID: ${{ secrets.ORGANIZATION_ID }}
+  FLOW_CHANGE_ID: ${{ inputs.execution_id != '' && inputs.execution_id || github.run_id }}
+  PL_PIPELINE_TYPE: APIGEE
+
 jobs:
   build-lint-deploy:
     runs-on: ubuntu-latest
@@ -106,6 +130,9 @@ jobs:
       id-token: write
 
     steps:
+      # Shell commands are piped through pipeline_logs.py so stdout/stderr
+      # stays visible in GitHub Actions while being streamed asynchronously
+      # to the Pipeline Logs API in bounded batches.
 
       # ===================================================
       # SETUP
@@ -134,7 +161,6 @@ jobs:
       - name: Install tools
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: SETUP
           LOG_STEP: INSTALL_TOOLS
         run: |
@@ -146,15 +172,25 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y jq unzip zip
             echo "Required tools installed successfully"
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       - name: Force GitHub auth
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: SETUP
           LOG_STEP: GITHUB_AUTH
         run: |
@@ -168,21 +204,31 @@ jobs:
               "https://github.com/"
 
             echo "GitHub authentication configuration completed"
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       - name: End group Setup
         if: always()
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: SETUP
           LOG_STEP: STAGE_COMPLETED
         run: |
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_COMPLETED \
-            --status "${{ job.status }}" \
+          STAGE_STATUS="${{ job.status }}"
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STAGE_STATUS" \
             --message "Setup stage completed" || true
           echo "::endgroup::"
 
@@ -192,20 +238,17 @@ jobs:
       - name: Start group Validation
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: VALIDATION
           LOG_STEP: STAGE_STARTED
         run: |
           echo "::group::Validation"
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_STARTED \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
             --status RUNNING \
             --message "Validation stage started" || true
 
       - name: Validate Resource Type
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: VALIDATION
           LOG_STEP: VALIDATE_RESOURCE_TYPE
         run: |
@@ -221,14 +264,24 @@ jobs:
             fi
 
             echo "Resource type: ${{ inputs.resourcetype }}"
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       - name: Validate release.properties
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: VALIDATION
           LOG_STEP: VALIDATE_RELEASE_PROPERTIES
         run: |
@@ -249,21 +302,31 @@ jobs:
 
             BASE_VERSION=$(grep '^version=' release.properties | cut -d'=' -f2)
             echo "Base version: $BASE_VERSION"
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       - name: End group Validation
         if: always()
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: VALIDATION
           LOG_STEP: STAGE_COMPLETED
         run: |
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_COMPLETED \
-            --status "${{ job.status }}" \
+          STAGE_STATUS="${{ job.status }}"
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STAGE_STATUS" \
             --message "Validation stage completed" || true
           echo "::endgroup::"
 
@@ -273,13 +336,11 @@ jobs:
       - name: Start group ForgeSphere Configuration
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: FORGESPHERE_CONFIGURATION
           LOG_STEP: STAGE_STARTED
         run: |
           echo "::group::ForgeSphere Configuration"
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_STARTED \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
             --status RUNNING \
             --message "ForgeSphere configuration stage started" || true
 
@@ -291,7 +352,6 @@ jobs:
           PROB_SERVICE_TOKEN_CLIENT_ID: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
           PROB_SERVICE_TOKEN_CLIENT_SECRET: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
           PROB_SERVICE_TOKEN_TENANT_ID: ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: FORGESPHERE_CONFIGURATION
           LOG_STEP: GET_SERVICE_TOKEN
         run: |
@@ -309,9 +369,20 @@ jobs:
             fi
 
             echo "ForgeSphere service token generated successfully"
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       - name: Load ForgeSphere CI/CD Configuration
         id: config
@@ -321,7 +392,6 @@ jobs:
           CICD_CONFIG_ID: ${{ secrets.cicd_profile_id }}
           SERVICE_ACCESS_TOKEN: ${{ steps.service-token.outputs.access_token }}
           DEPLOY_PROXY: ${{ inputs.deploy_proxy }}
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: FORGESPHERE_CONFIGURATION
           LOG_STEP: LOAD_CICD_CONFIG
         run: |
@@ -337,21 +407,31 @@ jobs:
 
             python3 pipeline-template/scripts/load_cicd_config.py
             echo "ForgeSphere CI/CD configuration processed successfully"
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       - name: End group ForgeSphere Configuration
         if: always()
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: FORGESPHERE_CONFIGURATION
           LOG_STEP: STAGE_COMPLETED
         run: |
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_COMPLETED \
-            --status "${{ job.status }}" \
+          STAGE_STATUS="${{ job.status }}"
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STAGE_STATUS" \
             --message "ForgeSphere configuration stage completed" || true
           echo "::endgroup::"
 
@@ -372,7 +452,6 @@ jobs:
         env:
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: SETUP
           LOG_STEP: SELECT_GITHUB_TOKEN
         run: |
@@ -388,9 +467,20 @@ jobs:
               echo "Using GH_TOKEN"
               echo "token=${GH_TOKEN}" >> "$GITHUB_OUTPUT"
             fi
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       # ===================================================
       # LINT
@@ -398,13 +488,11 @@ jobs:
       - name: Start group Lint
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: LINT
           LOG_STEP: STAGE_STARTED
         run: |
           echo "::group::Lint"
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_STARTED \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
             --status RUNNING \
             --message "Lint stage started" || true
 
@@ -421,7 +509,6 @@ jobs:
         continue-on-error: true
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: LINT
           LOG_STEP: APIGEE_LINT
         run: |
@@ -438,15 +525,25 @@ jobs:
             else
               echo "Skipping Apigee lint"
             fi
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       - name: JS Lint
         continue-on-error: true
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: LINT
           LOG_STEP: JS_LINT
         run: |
@@ -455,9 +552,20 @@ jobs:
           (
             set -euo pipefail
             npx jslint "$BUNDLE_DIR"/**/*.js
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       - name: Sonar Scan
         continue-on-error: true
@@ -465,7 +573,6 @@ jobs:
           SONAR_HOST_URL: ${{ steps.config.outputs.sonar_host_url }}
           SONAR_TOKEN: ${{ steps.config.outputs.sonar_token }}
           SONAR_PROJECT_KEY: ${{ steps.config.outputs.sonar_project_key }}
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: SONAR
           LOG_STEP: SONAR_SCAN
         shell: bash
@@ -482,21 +589,31 @@ jobs:
               -Dsonar.token="$SONAR_TOKEN" \
               -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
               -Dsonar.sources="$BUNDLE_DIR"
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       - name: End group Lint
         if: always()
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: LINT
           LOG_STEP: STAGE_COMPLETED
         run: |
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_COMPLETED \
-            --status "${{ job.status }}" \
+          STAGE_STATUS="${{ job.status }}"
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STAGE_STATUS" \
             --message "Lint stage completed" || true
           echo "::endgroup::"
 
@@ -508,7 +625,6 @@ jobs:
         shell: bash
         env:
           INPUT_VERSION: ${{ inputs.version }}
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: VERSION
           LOG_STEP: CALCULATE_VERSION
         run: |
@@ -527,9 +643,20 @@ jobs:
 
             echo "Version: $VERSION"
             echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       # ===================================================
       # PACKAGE
@@ -537,20 +664,17 @@ jobs:
       - name: Start group Package
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: PACKAGE
           LOG_STEP: STAGE_STARTED
         run: |
           echo "::group::Package"
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_STARTED \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
             --status RUNNING \
             --message "Package stage started" || true
 
       - name: Package Proxy
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: PACKAGE
           LOG_STEP: PACKAGE_PROXY
         run: |
@@ -582,21 +706,31 @@ jobs:
             echo "========================================"
 
             ls -lh "$ZIP_FILE" "$ARTIFACT_NAME"
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       - name: End group Package
         if: always()
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: PACKAGE
           LOG_STEP: STAGE_COMPLETED
         run: |
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_COMPLETED \
-            --status "${{ job.status }}" \
+          STAGE_STATUS="${{ job.status }}"
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STAGE_STATUS" \
             --message "Package stage completed" || true
           echo "::endgroup::"
 
@@ -606,13 +740,11 @@ jobs:
       - name: Start group Nexus Push
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: NEXUS
           LOG_STEP: STAGE_STARTED
         run: |
           echo "::group::Nexus Push"
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_STARTED \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
             --status RUNNING \
             --message "Nexus stage started" || true
 
@@ -626,7 +758,6 @@ jobs:
           NEXUS_REPOSITORY: ${{ steps.config.outputs.nexus_repository }}
           NEXUS_USERNAME: ${{ steps.config.outputs.nexus_username }}
           NEXUS_PASSWORD: ${{ steps.config.outputs.nexus_password }}
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: NEXUS
           LOG_STEP: PUSH_PACKAGE
         run: |
@@ -665,15 +796,25 @@ jobs:
               "$UPLOAD_URL"
 
             echo "Nexus upload successful"
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       - name: Nexus not configured
         if: steps.config.outputs.nexus_url == ''
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: NEXUS
           LOG_STEP: NEXUS_NOT_CONFIGURED
         run: |
@@ -682,21 +823,31 @@ jobs:
           (
             echo "Nexus configuration not available from ForgeSphere"
             echo "Skipping Nexus upload"
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       - name: End group Nexus Push
         if: always()
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: NEXUS
           LOG_STEP: STAGE_COMPLETED
         run: |
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_COMPLETED \
-            --status "${{ job.status }}" \
+          STAGE_STATUS="${{ job.status }}"
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STAGE_STATUS" \
             --message "Nexus stage completed" || true
           echo "::endgroup::"
 
@@ -706,13 +857,11 @@ jobs:
       - name: Start Gcloud login
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: GCP_AUTH
           LOG_STEP: STAGE_STARTED
         run: |
           echo "::group::Gcloud Login"
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_STARTED \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
             --status RUNNING \
             --message "GCP authentication stage started" || true
 
@@ -733,7 +882,6 @@ jobs:
         shell: bash
         env:
           ACCESS_TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: GCP_AUTH
           LOG_STEP: VERIFY_AUTHENTICATION
         run: |
@@ -748,22 +896,31 @@ jobs:
             fi
 
             echo "Apigee access token generated successfully"
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       - name: End Gcloud login
         if: always()
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: GCP_AUTH
           LOG_STEP: STAGE_COMPLETED
         run: |
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_COMPLETED \
-            --status "${{ job.status }}" \
-            --message "GCP authentication stage completed" || true
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+  --status STAGE_COMPLETED \
+  --message "GCP authentication stage completed" || true
           echo "::endgroup::"
 
       # ===================================================
@@ -772,13 +929,11 @@ jobs:
       - name: Start group Import
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: IMPORT
           LOG_STEP: STAGE_STARTED
         run: |
           echo "::group::Import"
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_STARTED \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
             --status RUNNING \
             --message "Import stage started" || true
 
@@ -786,7 +941,6 @@ jobs:
         shell: bash
         env:
           TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: IMPORT
           LOG_STEP: IMPORT_PROXY
         run: |
@@ -827,21 +981,31 @@ jobs:
             fi
 
             echo "Import successful"
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       - name: End group Import
         if: always()
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: IMPORT
           LOG_STEP: STAGE_COMPLETED
         run: |
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_COMPLETED \
-            --status "${{ job.status }}" \
+          STAGE_STATUS="${{ job.status }}"
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STAGE_STATUS" \
             --message "Import stage completed" || true
           echo "::endgroup::"
 
@@ -851,13 +1015,11 @@ jobs:
       - name: Start group Revision
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: REVISION
           LOG_STEP: STAGE_STARTED
         run: |
           echo "::group::Revision"
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_STARTED \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
             --status RUNNING \
             --message "Revision stage started" || true
 
@@ -866,7 +1028,6 @@ jobs:
         shell: bash
         env:
           TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: REVISION
           LOG_STEP: GET_LATEST_REVISION
         run: |
@@ -891,21 +1052,31 @@ jobs:
 
             echo "revision=$REV" >> "$GITHUB_OUTPUT"
             echo "Latest revision: $REV"
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       - name: End group Revision
         if: always()
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: REVISION
           LOG_STEP: STAGE_COMPLETED
         run: |
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_COMPLETED \
-            --status "${{ job.status }}" \
+          STAGE_STATUS="${{ job.status }}"
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STAGE_STATUS" \
             --message "Revision stage completed" || true
           echo "::endgroup::"
 
@@ -915,13 +1086,11 @@ jobs:
       - name: Start group Deployment
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: DEPLOYMENT
           LOG_STEP: STAGE_STARTED
         run: |
           echo "::group::Deployment"
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_STARTED \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
             --status RUNNING \
             --message "Deployment stage started" || true
 
@@ -931,7 +1100,6 @@ jobs:
           TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
           SERVICE_ACCOUNT_FILE: ${{ steps.config.outputs.apigee_serviceAccountFile }}
           SERVICE_ACCOUNT: ${{ steps.config.outputs.apigee_serviceAccountEmail }}
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: DEPLOYMENT
           LOG_STEP: DEPLOY_PROXY
         run: |
@@ -992,21 +1160,31 @@ jobs:
             fi
 
             echo "Deployment successful"
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       - name: End group Deployment
         if: always()
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: DEPLOYMENT
           LOG_STEP: STAGE_COMPLETED
         run: |
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_COMPLETED \
-            --status "${{ job.status }}" \
+          STAGE_STATUS="${{ job.status }}"
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STAGE_STATUS" \
             --message "Deployment stage completed" || true
           echo "::endgroup::"
 
@@ -1016,13 +1194,11 @@ jobs:
       - name: Start group Verify
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: VERIFY
           LOG_STEP: STAGE_STARTED
         run: |
           echo "::group::Verify"
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_STARTED \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
             --status RUNNING \
             --message "Verify stage started" || true
 
@@ -1030,7 +1206,6 @@ jobs:
         shell: bash
         env:
           TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: VERIFY
           LOG_STEP: VERIFY_DEPLOYMENT
         run: |
@@ -1060,21 +1235,31 @@ jobs:
             fi
 
             echo "Proxy verified successfully"
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       - name: End group Verify
         if: always()
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: VERIFY
           LOG_STEP: STAGE_COMPLETED
         run: |
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event STAGE_COMPLETED \
-            --status "${{ job.status }}" \
+          STAGE_STATUS="${{ job.status }}"
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STAGE_STATUS" \
             --message "Verify stage completed" || true
           echo "::endgroup::"
 
@@ -1085,7 +1270,6 @@ jobs:
         if: always()
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: CLEANUP
           LOG_STEP: CLEANUP
         run: |
@@ -1099,9 +1283,20 @@ jobs:
               sharedflowbundle.zip
 
             echo "Temporary configuration removed"
-          ) 2>&1 | python3 pipeline-template/scripts/execution_logger.py
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
-          exit ${PIPESTATUS[0]}
+          RESULT=${PIPESTATUS[0]}
+          if [ "$RESULT" -eq 0 ]; then
+            STEP_STATUS=COMPLETED
+          else
+            STEP_STATUS=FAILED
+          fi
+
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+            --status "$STEP_STATUS" \
+            --message "$LOG_STEP finished with exit code $RESULT" || true
+
+          exit "$RESULT"
 
       # ===================================================
       # FINAL EXECUTION STATUS
@@ -1110,14 +1305,12 @@ jobs:
         if: always()
         shell: bash
         env:
-          EXECUTION_LOG_API_TOKEN: ${{ secrets.EXECUTION_LOG_API_TOKEN }}
           LOG_STAGE: EXECUTION
           LOG_STEP: FINAL_STATUS
         run: |
           FINAL_STATUS="${{ job.status }}"
 
-          python3 pipeline-template/scripts/execution_logger.py \
-            --event EXECUTION_COMPLETED \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
             --status "$FINAL_STATUS" \
             --message "GitHub Actions execution completed with status: $FINAL_STATUS" || true
 
