@@ -921,8 +921,8 @@ jobs:
           LOG_STEP: STAGE_COMPLETED
         run: |
           python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
-  --status STAGE_COMPLETED \
-  --message "GCP authentication stage completed" || true
+            --status STAGE_COMPLETED \
+            --message "GCP authentication stage completed" || true
           echo "::endgroup::"
 
       # ===================================================
