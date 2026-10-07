@@ -392,6 +392,8 @@ jobs:
           CICD_CONFIG_ID: ${{ secrets.cicd_profile_id }}
           SERVICE_ACCESS_TOKEN: ${{ steps.service-token.outputs.access_token }}
           DEPLOY_PROXY: ${{ inputs.deploy_proxy }}
+          RESOURCE_TYPE: ${{ inputs.resourcetype }}
+          ENVIRONMENT: 'dev'
           LOG_STAGE: FORGESPHERE_CONFIGURATION
           LOG_STEP: LOAD_CICD_CONFIG
         run: |
@@ -405,7 +407,7 @@ jobs:
               exit 1
             fi
 
-            python3 pipeline-template/scripts/load_cicd_config.py
+            python3 pipeline-template/scripts/load_cicd_configs.py
             echo "ForgeSphere CI/CD configuration processed successfully"
           ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
 
