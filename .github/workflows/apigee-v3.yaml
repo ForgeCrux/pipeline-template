@@ -188,6 +188,8 @@ jobs:
           cleanup_credentials:        true
 
       - name: GCP auth stage
+        env:
+          ACCESS_TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
         run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/gcp_auth.sh"
 
       # -------- IMPORT --------
