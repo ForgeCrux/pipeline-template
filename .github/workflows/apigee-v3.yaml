@@ -111,7 +111,7 @@ jobs:
       # -------- FORGESPHERE CONFIGURATION --------
       - name: ForgeSphere configuration stage
         id: config
-        run: bash "${TEMPLATE_SCRIPTS}/stages/forgesphere_config.sh"
+        run: bash "${TEMPLATE_SCRIPTS}/forgesphere_config.sh"
 
       # -------- GITHUB APP TOKEN --------
       - name: Generate GitHub App token
