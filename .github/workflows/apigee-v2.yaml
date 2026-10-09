@@ -96,12 +96,6 @@ jobs:
       # ===================================================
       # SETUP
       # ===================================================
-      - name: Start group Setup
-        shell: bash
-        run: |
-          echo "::group::Setup"
-          echo "Setup stage started"
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -178,33 +172,9 @@ jobs:
 
           exit "$RESULT"
 
-      - name: End group Setup
-        if: always()
-        shell: bash
-        env:
-          LOG_STAGE: SETUP
-          LOG_STEP: STAGE_COMPLETED
-        run: |
-          STAGE_STATUS="${{ job.status }}"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status "$STAGE_STATUS" \
-            --message "Setup stage completed" || true
-          echo "::endgroup::"
-
       # ===================================================
       # VALIDATION
       # ===================================================
-      - name: Start group Validation
-        shell: bash
-        env:
-          LOG_STAGE: VALIDATION
-          LOG_STEP: STAGE_STARTED
-        run: |
-          echo "::group::Validation"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status RUNNING \
-            --message "Validation stage started" || true
-
       - name: Validate Resource Type
         shell: bash
         env:
@@ -276,33 +246,9 @@ jobs:
 
           exit "$RESULT"
 
-      - name: End group Validation
-        if: always()
-        shell: bash
-        env:
-          LOG_STAGE: VALIDATION
-          LOG_STEP: STAGE_COMPLETED
-        run: |
-          STAGE_STATUS="${{ job.status }}"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status "$STAGE_STATUS" \
-            --message "Validation stage completed" || true
-          echo "::endgroup::"
-
       # ===================================================
       # FORGESPHERE CONFIGURATION
       # ===================================================
-      - name: Start group ForgeSphere Configuration
-        shell: bash
-        env:
-          LOG_STAGE: FORGESPHERE_CONFIGURATION
-          LOG_STEP: STAGE_STARTED
-        run: |
-          echo "::group::ForgeSphere Configuration"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status RUNNING \
-            --message "ForgeSphere configuration stage started" || true
-
       - name: Get ForgeSphere Service Token
         id: service-token
         shell: bash
@@ -352,7 +298,7 @@ jobs:
           SERVICE_ACCESS_TOKEN: ${{ steps.service-token.outputs.access_token }}
           DEPLOY_PROXY: ${{ inputs.deploy_proxy }}
           RESOURCE_TYPE: ${{ inputs.resourcetype }}
-          ENVIRONMENT: ${{ inputs.apigee_env }}   # <-- was hardcoded 'dev'
+          ENVIRONMENT: ${{ inputs.apigee_env }}
           LOG_STAGE: FORGESPHERE_CONFIGURATION
           LOG_STEP: LOAD_CICD_CONFIG
         run: |
@@ -382,19 +328,6 @@ jobs:
             --message "$LOG_STEP finished with exit code $RESULT" || true
 
           exit "$RESULT"
-
-      - name: End group ForgeSphere Configuration
-        if: always()
-        shell: bash
-        env:
-          LOG_STAGE: FORGESPHERE_CONFIGURATION
-          LOG_STEP: STAGE_COMPLETED
-        run: |
-          STAGE_STATUS="${{ job.status }}"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status "$STAGE_STATUS" \
-            --message "ForgeSphere configuration stage completed" || true
-          echo "::endgroup::"
 
       # ===================================================
       # OPTIONAL GITHUB APP TOKEN
@@ -446,17 +379,6 @@ jobs:
       # ===================================================
       # LINT
       # ===================================================
-      - name: Start group Lint
-        shell: bash
-        env:
-          LOG_STAGE: LINT
-          LOG_STEP: STAGE_STARTED
-        run: |
-          echo "::group::Lint"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status RUNNING \
-            --message "Lint stage started" || true
-
       - name: Checkout lint rules
         continue-on-error: true
         uses: actions/checkout@v4
@@ -565,19 +487,6 @@ jobs:
 
           exit "$RESULT"
 
-      - name: End group Lint
-        if: always()
-        shell: bash
-        env:
-          LOG_STAGE: LINT
-          LOG_STEP: STAGE_COMPLETED
-        run: |
-          STAGE_STATUS="${{ job.status }}"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status "$STAGE_STATUS" \
-            --message "Lint stage completed" || true
-          echo "::endgroup::"
-
       # ===================================================
       # VERSION
       # ===================================================
@@ -622,17 +531,6 @@ jobs:
       # ===================================================
       # PACKAGE
       # ===================================================
-      - name: Start group Package
-        shell: bash
-        env:
-          LOG_STAGE: PACKAGE
-          LOG_STEP: STAGE_STARTED
-        run: |
-          echo "::group::Package"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status RUNNING \
-            --message "Package stage started" || true
-
       - name: Package Proxy
         shell: bash
         env:
@@ -682,33 +580,9 @@ jobs:
 
           exit "$RESULT"
 
-      - name: End group Package
-        if: always()
-        shell: bash
-        env:
-          LOG_STAGE: PACKAGE
-          LOG_STEP: STAGE_COMPLETED
-        run: |
-          STAGE_STATUS="${{ job.status }}"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status "$STAGE_STATUS" \
-            --message "Package stage completed" || true
-          echo "::endgroup::"
-
       # ===================================================
       # NEXUS PUSH
       # ===================================================
-      - name: Start group Nexus Push
-        shell: bash
-        env:
-          LOG_STAGE: NEXUS
-          LOG_STEP: STAGE_STARTED
-        run: |
-          echo "::group::Nexus Push"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status RUNNING \
-            --message "Nexus stage started" || true
-
       - name: Push Package to Nexus
         if: |
           steps.config.outputs.nexus_url != '' &&
@@ -799,33 +673,9 @@ jobs:
 
           exit "$RESULT"
 
-      - name: End group Nexus Push
-        if: always()
-        shell: bash
-        env:
-          LOG_STAGE: NEXUS
-          LOG_STEP: STAGE_COMPLETED
-        run: |
-          STAGE_STATUS="${{ job.status }}"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status "$STAGE_STATUS" \
-            --message "Nexus stage completed" || true
-          echo "::endgroup::"
-
       # ===================================================
       # APIGEE TOKEN SERVICE AUTH
       # ===================================================
-      - name: Start Gcloud login
-        shell: bash
-        env:
-          LOG_STAGE: GCP_AUTH
-          LOG_STEP: STAGE_STARTED
-        run: |
-          echo "::group::Gcloud Login"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status RUNNING \
-            --message "GCP authentication stage started" || true
-
       - name: Authenticate GitHub to Google Cloud
         id: gcp-auth
         uses: google-github-actions/auth@v3
@@ -872,32 +722,9 @@ jobs:
 
           exit "$RESULT"
 
-      - name: End Gcloud login
-        if: always()
-        shell: bash
-        env:
-          LOG_STAGE: GCP_AUTH
-          LOG_STEP: STAGE_COMPLETED
-        run: |
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status STAGE_COMPLETED \
-            --message "GCP authentication stage completed" || true
-          echo "::endgroup::"
-
       # ===================================================
       # IMPORT
       # ===================================================
-      - name: Start group Import
-        shell: bash
-        env:
-          LOG_STAGE: IMPORT
-          LOG_STEP: STAGE_STARTED
-        run: |
-          echo "::group::Import"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status RUNNING \
-            --message "Import stage started" || true
-
       - name: Import Proxy
         shell: bash
         env:
@@ -957,33 +784,9 @@ jobs:
 
           exit "$RESULT"
 
-      - name: End group Import
-        if: always()
-        shell: bash
-        env:
-          LOG_STAGE: IMPORT
-          LOG_STEP: STAGE_COMPLETED
-        run: |
-          STAGE_STATUS="${{ job.status }}"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status "$STAGE_STATUS" \
-            --message "Import stage completed" || true
-          echo "::endgroup::"
-
       # ===================================================
       # GET REVISION
       # ===================================================
-      - name: Start group Revision
-        shell: bash
-        env:
-          LOG_STAGE: REVISION
-          LOG_STEP: STAGE_STARTED
-        run: |
-          echo "::group::Revision"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status RUNNING \
-            --message "Revision stage started" || true
-
       - name: Get Latest Revision
         id: revision
         shell: bash
@@ -1028,33 +831,9 @@ jobs:
 
           exit "$RESULT"
 
-      - name: End group Revision
-        if: always()
-        shell: bash
-        env:
-          LOG_STAGE: REVISION
-          LOG_STEP: STAGE_COMPLETED
-        run: |
-          STAGE_STATUS="${{ job.status }}"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status "$STAGE_STATUS" \
-            --message "Revision stage completed" || true
-          echo "::endgroup::"
-
       # ===================================================
       # DEPLOY
       # ===================================================
-      - name: Start group Deployment
-        shell: bash
-        env:
-          LOG_STAGE: DEPLOYMENT
-          LOG_STEP: STAGE_STARTED
-        run: |
-          echo "::group::Deployment"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status RUNNING \
-            --message "Deployment stage started" || true
-
       - name: Deploy Proxy
         shell: bash
         env:
@@ -1136,33 +915,9 @@ jobs:
 
           exit "$RESULT"
 
-      - name: End group Deployment
-        if: always()
-        shell: bash
-        env:
-          LOG_STAGE: DEPLOYMENT
-          LOG_STEP: STAGE_COMPLETED
-        run: |
-          STAGE_STATUS="${{ job.status }}"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status "$STAGE_STATUS" \
-            --message "Deployment stage completed" || true
-          echo "::endgroup::"
-
       # ===================================================
       # VERIFY
       # ===================================================
-      - name: Start group Verify
-        shell: bash
-        env:
-          LOG_STAGE: VERIFY
-          LOG_STEP: STAGE_STARTED
-        run: |
-          echo "::group::Verify"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status RUNNING \
-            --message "Verify stage started" || true
-
       - name: Verify Deployment
         shell: bash
         env:
@@ -1210,19 +965,6 @@ jobs:
             --message "$LOG_STEP finished with exit code $RESULT" || true
 
           exit "$RESULT"
-
-      - name: End group Verify
-        if: always()
-        shell: bash
-        env:
-          LOG_STAGE: VERIFY
-          LOG_STEP: STAGE_COMPLETED
-        run: |
-          STAGE_STATUS="${{ job.status }}"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
-            --status "$STAGE_STATUS" \
-            --message "Verify stage completed" || true
-          echo "::endgroup::"
 
       # ===================================================
       # CLEANUP
