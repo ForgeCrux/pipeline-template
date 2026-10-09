@@ -147,7 +147,7 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y jq unzip zip
             echo "Required tools installed successfully"
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE"  -- "$LOG_STEP"
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -179,7 +179,7 @@ jobs:
               "https://github.com/"
 
             echo "GitHub authentication configuration completed"
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE"-- "$LOG_STEP""
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -188,9 +188,9 @@ jobs:
             STEP_STATUS=FAILED
           fi
 
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE"-- "$LOG_STEP"" \
             --status "$STEP_STATUS" \
-            --message "$LOG_STEP finished with exit code $RESULT" || true
+            --message-- "$LOG_STEP" finished with exit code $RESULT" || true
 
           exit "$RESULT"
 
@@ -202,7 +202,7 @@ jobs:
           LOG_STEP: STAGE_COMPLETED
         run: |
           STAGE_STATUS="${{ job.status }}"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE"-- "$LOG_STEP"" \
             --status "$STAGE_STATUS" \
             --message "Setup stage completed" || true
           echo "::endgroup::"
@@ -217,7 +217,7 @@ jobs:
           LOG_STEP: STAGE_STARTED
         run: |
           echo "::group::Validation"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE"-- "$LOG_STEP"" \
             --status RUNNING \
             --message "Validation stage started" || true
 
@@ -239,7 +239,7 @@ jobs:
             fi
 
             echo "Resource type: ${{ inputs.resourcetype }}"
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE"-- "$LOG_STEP""
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -248,7 +248,7 @@ jobs:
             STEP_STATUS=FAILED
           fi
 
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP"" \
             --status "$STEP_STATUS" \
             --message "$LOG_STEP finished with exit code $RESULT" || true
 
@@ -277,7 +277,7 @@ jobs:
 
             BASE_VERSION=$(grep '^version=' release.properties | cut -d'=' -f2)
             echo "Base version: $BASE_VERSION"
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE"-- "$LOG_STEP""
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -286,9 +286,9 @@ jobs:
             STEP_STATUS=FAILED
           fi
 
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP"" \
             --status "$STEP_STATUS" \
-            --message "$LOG_STEP finished with exit code $RESULT" || true
+            --message -- "$LOG_STEP" finished with exit code $RESULT" || true
 
           exit "$RESULT"
 
@@ -300,7 +300,7 @@ jobs:
           LOG_STEP: STAGE_COMPLETED
         run: |
           STAGE_STATUS="${{ job.status }}"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP"" \
             --status "$STAGE_STATUS" \
             --message "Validation stage completed" || true
           echo "::endgroup::"
@@ -315,7 +315,7 @@ jobs:
           LOG_STEP: STAGE_STARTED
         run: |
           echo "::group::ForgeSphere Configuration"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP"" \
             --status RUNNING \
             --message "ForgeSphere configuration stage started" || true
 
@@ -344,7 +344,7 @@ jobs:
             fi
 
             echo "ForgeSphere service token generated successfully"
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" -- "$LOG_STEP""
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -353,7 +353,7 @@ jobs:
             STEP_STATUS=FAILED
           fi
 
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP"" \
             --status "$STEP_STATUS" \
             --message "$LOG_STEP finished with exit code $RESULT" || true
 
@@ -384,7 +384,7 @@ jobs:
 
             python3 pipeline-template/scripts/load_cicd_configs.py
             echo "ForgeSphere CI/CD configuration processed successfully"
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" -- "$LOG_STEP""
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -393,7 +393,7 @@ jobs:
             STEP_STATUS=FAILED
           fi
 
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP"" \
             --status "$STEP_STATUS" \
             --message "$LOG_STEP finished with exit code $RESULT" || true
 
@@ -407,7 +407,7 @@ jobs:
           LOG_STEP: STAGE_COMPLETED
         run: |
           STAGE_STATUS="${{ job.status }}"
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP"" \
             --status "$STAGE_STATUS" \
             --message "ForgeSphere configuration stage completed" || true
           echo "::endgroup::"
@@ -444,7 +444,7 @@ jobs:
               echo "Using GH_TOKEN"
               echo "token=${GH_TOKEN}" >> "$GITHUB_OUTPUT"
             fi
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE"  -- "$LOG_STEP"
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -502,7 +502,7 @@ jobs:
             else
               echo "Skipping Apigee lint"
             fi
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE"  -- "$LOG_STEP"
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -529,7 +529,7 @@ jobs:
           (
             set -euo pipefail
             npx jslint "$BUNDLE_DIR"/**/*.js
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE"  -- "$LOG_STEP"
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -566,7 +566,7 @@ jobs:
               -Dsonar.token="$SONAR_TOKEN" \
               -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
               -Dsonar.sources="$BUNDLE_DIR"
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE"  -- "$LOG_STEP"
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -620,7 +620,7 @@ jobs:
 
             echo "Version: $VERSION"
             echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE"  -- "$LOG_STEP"
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -683,7 +683,7 @@ jobs:
             echo "========================================"
 
             ls -lh "$ZIP_FILE" "$ARTIFACT_NAME"
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE"  -- "$LOG_STEP"
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -773,7 +773,7 @@ jobs:
               "$UPLOAD_URL"
 
             echo "Nexus upload successful"
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE"  -- "$LOG_STEP"
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -800,7 +800,7 @@ jobs:
           (
             echo "Nexus configuration not available from ForgeSphere"
             echo "Skipping Nexus upload"
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE"  -- "$LOG_STEP"
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -873,7 +873,7 @@ jobs:
             fi
 
             echo "Apigee access token generated successfully"
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE"  -- "$LOG_STEP"
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -958,7 +958,7 @@ jobs:
             fi
 
             echo "Import successful"
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE"  -- "$LOG_STEP"
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -1029,7 +1029,7 @@ jobs:
 
             echo "revision=$REV" >> "$GITHUB_OUTPUT"
             echo "Latest revision: $REV"
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE"  -- "$LOG_STEP"
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -1137,7 +1137,7 @@ jobs:
             fi
 
             echo "Deployment successful"
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE"  -- "$LOG_STEP"
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -1212,7 +1212,7 @@ jobs:
             fi
 
             echo "Proxy verified successfully"
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE"  -- "$LOG_STEP"
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
@@ -1260,7 +1260,7 @@ jobs:
               sharedflowbundle.zip
 
             echo "Temporary configuration removed"
-          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE" "$LOG_STEP"
+          ) 2>&1 | python3 pipeline-template/scripts/pipeline_logs.py stdin "$LOG_STAGE"  -- "$LOG_STEP"
 
           RESULT=${PIPESTATUS[0]}
           if [ "$RESULT" -eq 0 ]; then
