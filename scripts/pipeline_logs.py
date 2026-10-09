@@ -28,13 +28,18 @@ Required environment variables:
 
 Optional:
 
-    PL_PIPELINE_TYPE
-        Default: ONBOARDING
+    PL_PIPELINE_TYPE   Default: ONBOARDING
+    FLOW_TYPE          Forwarded to events as flowType
+    RESOURCE_ID        Forwarded to events as resourceId
+    APIGEE_ORG         Forwarded to events as organizationId
+
+    GITHUB_ACTOR / GITHUB_RUN_ID / GITHUB_SHA / GITHUB_REF_NAME
+        Provided by GitHub Actions and forwarded to events as the
+        `trigger` block. Read-only; no configuration needed.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
@@ -61,13 +66,27 @@ JOB_STATUS_MAP = {
 
 class PipelineLogger:
     def __init__(self) -> None:
+        # --- Service configuration ------------------------------------
         self.pipeline_logs_url = os.getenv("PIPELINE_LOGS_URL", "").rstrip("/")
         self.token_issuer_url = os.getenv("TOKEN_ISSUER_URL", "")
         self.client_id = os.getenv("CLIENT_ID", "")
         self.client_secret = os.getenv("CLIENT_SECRET", "")
         self.organization_id = os.getenv("ORGANIZATION_ID", "")
         self.flow_change_id = os.getenv("FLOW_CHANGE_ID", "")
-        self.pipeline_type = os.getenv("PL_PIPELINE_TYPE", "ONBOARDING")
+
+        # Match the Bash script's "${PL_PIPELINE_TYPE:-ONBOARDING}" behavior.
+        self.pipeline_type = os.getenv("PL_PIPELINE_TYPE", "") or "ONBOARDING"
+
+        # --- Flow metadata (forwarded on every event) -----------------
+        self.flow_type = os.getenv("FLOW_TYPE", "")
+        self.resource_id = os.getenv("RESOURCE_ID", "")
+        self.apigee_org = os.getenv("APIGEE_ORG", "")
+
+        # --- Trigger metadata (built-in GH Actions env vars) ----------
+        self.github_actor = os.getenv("GITHUB_ACTOR", "")
+        self.github_run_id = os.getenv("GITHUB_RUN_ID", "")
+        self.github_sha = os.getenv("GITHUB_SHA", "")
+        self.github_branch = os.getenv("GITHUB_REF_NAME", "")
 
         self.token: Optional[str] = None
         self.last_token_refresh = 0.0
@@ -169,6 +188,19 @@ class PipelineLogger:
             response.raise_for_status()
             return True
 
+        except requests.HTTPError as exc:
+            # Print the API's response body so schema errors are visible.
+            print(
+                f"pipeline-logs call failed (ignored): {exc}",
+                file=sys.stderr,
+            )
+            if exc.response is not None:
+                print(
+                    f"pipeline-logs response body: {exc.response.text}",
+                    file=sys.stderr,
+                )
+            return False
+
         except Exception as exc:
             print(
                 f"pipeline-logs call failed (ignored): {exc}",
@@ -177,25 +209,63 @@ class PipelineLogger:
             return False
 
     # ------------------------------------------------------------------
-    # Stage / step status
+    # Common event envelope
     # ------------------------------------------------------------------
 
-    def stage_status(
+    def _envelope(self) -> dict:
+        """
+        Fields included on EVERY event, regardless of type.
+
+        The `stepKey` field is deliberately omitted — the Pipeline Logs
+        API rejects it with 400 (the Bash reference script never sends
+        it either).
+        """
+        envelope: dict = {
+            "flowChangeId": self.flow_change_id,
+            "pipelineType": self.pipeline_type,
+        }
+
+        # Flow details — only include when actually known.
+        if self.flow_type:
+            envelope["flowType"] = self.flow_type
+        if self.apigee_org:
+            envelope["organizationId"] = self.apigee_org
+        if self.resource_id:
+            envelope["resourceId"] = self.resource_id
+
+        # Trigger details — nested so the schema stays extensible.
+        trigger: dict = {}
+        if self.github_actor:
+            trigger["actor"] = self.github_actor
+        if self.github_run_id:
+            trigger["runId"] = self.github_run_id
+        if self.github_sha:
+            trigger["sha"] = self.github_sha
+        if self.github_branch:
+            trigger["branch"] = self.github_branch
+
+        if trigger:
+            envelope["trigger"] = trigger
+
+        return envelope
+
+    # ------------------------------------------------------------------
+    # Payload builders
+    # ------------------------------------------------------------------
+
+    def _status_payload(
         self,
         stage_key: str,
         status: str,
         message: str = "",
-        step_key: str = "",
-    ) -> bool:
-        body = {
-            "flowChangeId": self.flow_change_id,
-            "pipelineType": self.pipeline_type,
-            "stageKey": stage_key,
-            "status": status,
-        }
-
-        if step_key:
-            body["stepKey"] = step_key
+    ) -> dict:
+        """
+        Mirrors pl_stage_status() in pipeline_logs.sh, plus flow/trigger
+        metadata on top.
+        """
+        body = self._envelope()
+        body["stageKey"] = stage_key
+        body["status"] = status
 
         if message:
             body["message"] = message
@@ -204,35 +274,47 @@ class PipelineLogger:
                     {"level": "ERROR", "message": message}
                 ]
 
-        return self.event(body)
+        return body
+
+    def _lines_payload(
+        self,
+        stage_key: str,
+        lines: list[str],
+    ) -> dict:
+        """
+        Mirrors the stream_logs() payload in pipeline_logs.sh, plus
+        flow/trigger metadata on top.
+        """
+        body = self._envelope()
+        body["stageKey"] = stage_key
+        body["lines"] = [
+            {"level": "INFO", "message": line}
+            for line in lines
+        ]
+        return body
 
     # ------------------------------------------------------------------
-    # Log event
+    # Public senders
     # ------------------------------------------------------------------
+
+    def stage_status(
+        self,
+        stage_key: str,
+        status: str,
+        message: str = "",
+    ) -> bool:
+        return self.event(
+            self._status_payload(stage_key, status, message)
+        )
 
     def send_lines(
         self,
         stage_key: str,
         lines: list[str],
-        step_key: str = "",
     ) -> bool:
         if not lines:
             return True
-
-        payload = {
-            "flowChangeId": self.flow_change_id,
-            "pipelineType": self.pipeline_type,
-            "stageKey": stage_key,
-            "lines": [
-                {"level": "INFO", "message": line}
-                for line in lines
-            ],
-        }
-
-        if step_key:
-            payload["stepKey"] = step_key
-
-        return self.event(payload)
+        return self.event(self._lines_payload(stage_key, lines))
 
     # ------------------------------------------------------------------
     # Async log streamer (legacy mode)
@@ -406,8 +488,9 @@ def handle_stdin(
     """
     Reads lines from stdin, echoes them to stdout (so they appear in the
     GitHub Actions console), and batches them to the Pipeline Logs API.
-    Always returns 0 so that `pipefail` on the upstream command is not
-    masked by logging failures.
+
+    `step_key` is accepted for CLI compatibility with the reusable
+    workflow but is NOT sent to the API — the API rejects it with 400.
     """
     logging_enabled = logger.get_token()
 
@@ -423,14 +506,13 @@ def handle_stdin(
 
     try:
         for line in sys.stdin:
-            # Preserve GitHub Actions console output.
             sys.stdout.write(line)
             sys.stdout.flush()
 
             batch.append(line.rstrip("\r\n"))
 
             if len(batch) >= LOG_CHUNK_SIZE:
-                logger.send_lines(stage_key, batch, step_key)
+                logger.send_lines(stage_key, batch)
                 batch = []
 
             now = time.time()
@@ -445,7 +527,7 @@ def handle_stdin(
         )
 
     if batch:
-        logger.send_lines(stage_key, batch, step_key)
+        logger.send_lines(stage_key, batch)
 
     return 0
 
@@ -462,7 +544,7 @@ def handle_event(
 ) -> int:
     """
     Emits a status event to the Pipeline Logs API.
-    Always returns 0; logging must never affect CI/CD outcome.
+    `step_key` is accepted for CLI compatibility but not forwarded.
     """
     status = ""
     message = ""
@@ -482,13 +564,13 @@ def handle_event(
     if not status:
         status = "COMPLETED"
 
-    # Normalise GitHub Actions job.status values.
+    # Normalise GitHub Actions job.status values (success/failure/...).
     status = JOB_STATUS_MAP.get(status.lower(), status)
 
     if not logger.get_token():
         return 0
 
-    logger.stage_status(stage_key, status, message, step_key)
+    logger.stage_status(stage_key, status, message)
     return 0
 
 
@@ -521,10 +603,7 @@ def _parse_stage_step(
 # ----------------------------------------------------------------------
 
 def _print_usage() -> None:
-    print(
-        "Usage:",
-        file=sys.stderr,
-    )
+    print("Usage:", file=sys.stderr)
     print(
         "  python3 pipeline_logs.py stdin <stage_key> -- <step_key>",
         file=sys.stderr,
@@ -582,7 +661,6 @@ def main() -> int:
         return 2
 
     command = sys.argv[3:]
-
     if not command:
         print("No command specified", file=sys.stderr)
         return 2
