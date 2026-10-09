@@ -99,7 +99,7 @@ jobs:
       - name: Resolve Flow Change ID
         env:
           RAW_FLOW_CHANGE_ID: ${{ secrets.FLOW_CHANGE_ID }}
-        run: bash "${ROOT_TEMPLATE_SCRIPTS}/resolve_flow_change_id.sh"
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/resolve_flow_change_id.sh"
 
       # -------- SETUP --------
       - name: Setup stage
@@ -112,7 +112,7 @@ jobs:
       # -------- FORGESPHERE CONFIGURATION --------
       - name: ForgeSphere configuration stage
         id: config
-        run: bash "${ROOT_TEMPLATE_SCRIPTS}/forgesphere_config.sh"
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/forgesphere_config.sh"
 
       # -------- GITHUB APP TOKEN --------
       - name: Generate GitHub App token
