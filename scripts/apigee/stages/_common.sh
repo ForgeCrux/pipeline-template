@@ -1,15 +1,29 @@
 #!/usr/bin/env bash
-# _common.sh — shared helpers for stage scripts.
+# _common.sh — shared helpers for Apigee stage scripts.
 
 set -euo pipefail
 
-_STAGES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_SCRIPTS_DIR="$(cd "${_STAGES_DIR}/.." && pwd)"
+# Directory layout:
+#   scripts/
+#     pipeline_logs.py
+#     get_service_token.py
+#     load_cicd_configs.py
+#     apigee/
+#       resolve_flow_change_id.sh
+#       stages/
+#         _common.sh          <-- this file
+#         <stage>.sh
+
+_STAGES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"   # scripts/apigee/stages
+_APIGEE_DIR="$(cd "${_STAGES_DIR}/.." && pwd)"                # scripts/apigee
+_SCRIPTS_DIR="$(cd "${_APIGEE_DIR}/.." && pwd)"               # scripts
+
 _LOGS_PY="${_SCRIPTS_DIR}/pipeline_logs.py"
 
+# Expose these to sourcing scripts so they don't have to recompute.
+export _STAGES_DIR _APIGEE_DIR _SCRIPTS_DIR _LOGS_PY
+
 # run_step <stage> <step> <command...>
-# Pipes command stdout/stderr through pipeline_logs.py stdin and emits
-# a COMPLETED/FAILED event for the step. Returns the command's exit code.
 run_step() {
   local stage="$1"; shift
   local step="$1"; shift
@@ -35,8 +49,6 @@ emit_event() {
 }
 
 # stage_run <stage> <title> <body-function>
-# Wraps a stage: opens ::group::, emits STAGE_STARTED, runs the body,
-# then emits STAGE_COMPLETED (or FAILED) and closes the group.
 stage_run() {
   local stage="$1"
   local title="$2"
@@ -57,7 +69,7 @@ stage_run() {
   return "$result"
 }
 
-# append_output <key> <value>  — writes to $GITHUB_OUTPUT (no-op if unset).
+# append_output <key> <value> — writes to $GITHUB_OUTPUT (no-op if unset).
 append_output() {
   [ -n "${GITHUB_OUTPUT:-}" ] || return 0
   printf '%s=%s\n' "$1" "$2" >> "$GITHUB_OUTPUT"
