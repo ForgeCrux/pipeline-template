@@ -105,6 +105,63 @@ jobs:
           repository: ForgeCrux/pipeline-template
           ref: main
           path: pipeline-template
+      
+      - name: Resolve Flow Change ID
+        id: flow-change-id
+        shell: bash
+        env:
+          RAW_FLOW_CHANGE_ID: ${{ secrets.FLOW_CHANGE_ID }}
+          CURRENT_SHA:        ${{ github.sha }}
+          CURRENT_BRANCH:     ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          RESOLVED=""
+
+          # Case 1: composite "<uuid>:<sha>:<branch>" (the format emitted
+          # by the ForgeSphere onboarding flow).
+          if [[ "$RAW_FLOW_CHANGE_ID" =~ ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}):([0-9a-fA-F]+):(.+)$ ]]; then
+            RAW_UUID="${BASH_REMATCH[1]}"
+            RAW_SHA="${BASH_REMATCH[2]}"
+            RAW_BRANCH="${BASH_REMATCH[3]}"
+
+            SHA_MATCH=0
+            if [[ "$RAW_SHA" == "$CURRENT_SHA" ]]; then
+              SHA_MATCH=1
+            elif [[ "$CURRENT_SHA" == "$RAW_SHA"* ]]; then
+              # Accept short SHA matching the prefix of the full SHA.
+              SHA_MATCH=1
+            fi
+
+            if [[ "$SHA_MATCH" == "1" && "$RAW_BRANCH" == "$CURRENT_BRANCH" ]]; then
+              RESOLVED="$RAW_UUID"
+              echo "Reusing existing flow change ID (sha and branch match this run)"
+            else
+              echo "SHA or branch mismatch; generating a new flow change ID"
+              echo "  expected sha/branch: $CURRENT_SHA / $CURRENT_BRANCH"
+              echo "  supplied sha/branch: $RAW_SHA / $RAW_BRANCH"
+            fi
+
+          # Case 2: bare UUID supplied directly.
+          elif [[ "$RAW_FLOW_CHANGE_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            RESOLVED="$RAW_FLOW_CHANGE_ID"
+            echo "Using supplied bare UUID as flow change ID"
+
+          # Case 3: empty, a raw run_id, or anything else → generate new.
+          else
+            echo "No reusable flow change ID supplied; generating a new one"
+          fi
+
+          if [[ -z "$RESOLVED" ]]; then
+            if command -v uuidgen >/dev/null 2>&1; then
+              RESOLVED="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+            else
+              RESOLVED="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+            fi
+          fi
+
+          echo "Resolved FLOW_CHANGE_ID=$RESOLVED"
+          echo "FLOW_CHANGE_ID=$RESOLVED" >> "$GITHUB_ENV"
 
       - name: Setup Node
         uses: actions/setup-node@v4
