@@ -153,12 +153,12 @@ jobs:
       # -------- VERSION --------
       - name: Calculate version
         id: version
-        if: steps.config.outputs.merge_branch == github.ref_name
+        #if: steps.config.outputs.merge_branch == github.ref_name
         run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/version.sh"
 
       # -------- PACKAGE --------
       - name: Package stage
-        if: steps.config.outputs.merge_branch == github.ref_name
+        #if: steps.config.outputs.merge_branch == github.ref_name
         run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/package.sh"
 
       # -------- NEXUS --------
