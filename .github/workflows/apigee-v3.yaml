@@ -194,11 +194,15 @@ jobs:
 
       # -------- IMPORT --------
       - name: Import stage
+        env:
+          ACCESS_TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
         run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/import.sh"
 
       # -------- REVISION --------
       - name: Revision stage
         id: revision
+        env:
+          ACCESS_TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
         run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/revision.sh"
 
       # -------- DEPLOY --------
@@ -210,6 +214,8 @@ jobs:
 
       # -------- VERIFY --------
       - name: Verify stage
+        env:
+          ACCESS_TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
         run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/verify.sh"
 
       # -------- CLEANUP --------
