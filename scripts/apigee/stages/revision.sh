@@ -5,7 +5,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 _get_latest_revision() {
   local rev
   rev="$(curl --silent --show-error \
-    -H "Authorization: Bearer ${TOKEN}" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     "https://apigee.googleapis.com/v1/organizations/${APIGEE_ORG}/${RESOURCE_TYPE}/${DEPLOY_PROXY}/revisions" \
     | jq -r 'map(tonumber) | max')"
 

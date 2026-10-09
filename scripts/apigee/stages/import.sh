@@ -10,7 +10,7 @@ _import_proxy() {
 
   local response
   response="$(curl --silent --show-error --write-out '\nHTTP_STATUS:%{http_code}\n' \
-    -X POST -H "Authorization: Bearer ${TOKEN}" \
+    -X POST -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     -F "file=@${zip}" "$url")"
 
   local status
