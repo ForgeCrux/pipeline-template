@@ -38,11 +38,6 @@ on:
         default: ''
         type: string
 
-      execution_log_api_url:
-        required: false
-        default: 'https://forgesphere.probestack.io/pipeline-logs'
-        type: string
-
     secrets:
       CICD_PROFILE_ID:
         required: true
@@ -89,8 +84,7 @@ permissions:
 env:
   RESOURCE_TYPE: ${{ inputs.resourcetype }}
   BUNDLE_DIR: ${{ inputs.resourcetype == 'apis' && 'apiproxy' || 'sharedflowbundle' }}
-  EXECUTION_LOG_API_URL: ${{ inputs.execution_log_api_url }}
-
+  EXECUTION_LOG_API_URL: 'https://forgesphere.probestack.io/pipeline-logs'
   LOG_BUFFER_SIZE: '50'
   LOG_FLUSH_INTERVAL: '2'
   LOG_REQUEST_TIMEOUT: '10'
