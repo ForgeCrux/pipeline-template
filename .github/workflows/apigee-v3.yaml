@@ -136,7 +136,7 @@ jobs:
           ref: develop
           path: apigee-linting-custom
           token: ${{ steps.token-select.outputs.token }}
-          
+
       - name: Lint stage
         env:
           GH_LINT_TOKEN:    ${{ steps.token-select.outputs.token }}
@@ -153,14 +153,17 @@ jobs:
       # -------- VERSION --------
       - name: Calculate version
         id: version
+        if: steps.config.outputs.merge_branch == github.ref_name
         run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/version.sh"
 
       # -------- PACKAGE --------
       - name: Package stage
+        if: steps.config.outputs.merge_branch == github.ref_name
         run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/package.sh"
 
       # -------- NEXUS --------
       - name: Nexus stage
+        if: steps.config.outputs.merge_branch == github.ref_name
         env:
           NEXUS_URL:        ${{ steps.config.outputs.nexus_url }}
           NEXUS_REPOSITORY: ${{ steps.config.outputs.nexus_repository }}
