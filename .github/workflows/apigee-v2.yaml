@@ -38,22 +38,13 @@ on:
         default: ''
         type: string
 
-      # Execution id supplied by the caller/API.
-      # Falls back to github.run_id when omitted.
-      execution_id:
-        required: false
-        default: ''
-        type: string
-
-      # FastAPI endpoint. The endpoint should return 202 quickly and
-      # enqueue persistence through Redis/Celery.
       execution_log_api_url:
         required: false
-        default: 'https://forgesphere.probestack.io/cicd-automation/v1/api/cicd-config'
+        default: 'https://forgesphere.probestack.io/pipeline-logs'
         type: string
 
     secrets:
-      cicd_profile_id:
+      CICD_PROFILE_ID:
         required: true
 
       GH_TOKEN:
@@ -76,21 +67,17 @@ on:
 
       PROB_SERVICE_TOKEN_TENANT_ID:
         required: true
+        
+      FLOW_CHANGE_ID:
+        required: true
 
-      # Token for the execution-log FastAPI endpoint.
-      #EXECUTION_LOG_API_TOKEN:
-      #  required: true
+      RESOURCE_ID:
+        required: true
 
-      PIPELINE_LOGS_URL:
-        required: false
-
+      FLOW_TYPE:
+        required: true
+            
       TOKEN_ISSUER_URL:
-        required: false
-
-      PIPELINE_LOGS_CLIENT_ID:
-        required: false
-
-      PIPELINE_LOGS_CLIENT_SECRET:
         required: false
 
       ORGANIZATION_ID:
@@ -102,8 +89,6 @@ permissions:
 env:
   RESOURCE_TYPE: ${{ inputs.resourcetype }}
   BUNDLE_DIR: ${{ inputs.resourcetype == 'apis' && 'apiproxy' || 'sharedflowbundle' }}
-
-  EXECUTION_ID: ${{ inputs.execution_id != '' && inputs.execution_id || github.run_id }}
   EXECUTION_LOG_API_URL: ${{ inputs.execution_log_api_url }}
 
   LOG_BUFFER_SIZE: '50'
@@ -117,7 +102,7 @@ env:
   CLIENT_ID: ${{ secrets.PIPELINE_LOGS_CLIENT_ID }}
   CLIENT_SECRET: ${{ secrets.PIPELINE_LOGS_CLIENT_SECRET }}
   ORGANIZATION_ID: ${{ secrets.ORGANIZATION_ID }}
-  FLOW_CHANGE_ID: ${{ inputs.execution_id != '' && inputs.execution_id || github.run_id }}
+  FLOW_CHANGE_ID: ${{ secrets.FLOW_CHANGE_ID != '' && secrets.FLOW_CHANGE_ID || github.run_id }}
   PL_PIPELINE_TYPE: APIGEE
 
 jobs:
@@ -389,7 +374,7 @@ jobs:
         shell: bash
         env:
           CICD_CONFIG_URL: ${{ inputs.cicd_config_url }}
-          CICD_CONFIG_ID: ${{ secrets.cicd_profile_id }}
+          CICD_CONFIG_ID: ${{ secrets.CICD_PROFILE_ID }}
           SERVICE_ACCESS_TOKEN: ${{ steps.service-token.outputs.access_token }}
           DEPLOY_PROXY: ${{ inputs.deploy_proxy }}
           RESOURCE_TYPE: ${{ inputs.resourcetype }}
