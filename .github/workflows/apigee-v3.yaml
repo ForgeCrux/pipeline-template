@@ -145,6 +145,13 @@ jobs:
         run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/lint.sh"
 
       # -------- SONAR --------
+      - name: Setup Java
+        if: steps.config.outputs.sonar_host_url != ''
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          
       - name: Sonar stage
         env:
           SONAR_HOST_URL:   ${{ steps.config.outputs.sonar_host_url }}
