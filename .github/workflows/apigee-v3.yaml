@@ -145,11 +145,15 @@ jobs:
 
       # -------- SONAR --------
       - name: Sonar stage
+        if: steps.config.outputs.sonar_host_url != ''
+        uses: SonarSource/sonarqube-scan-action@v5
         env:
-          SONAR_HOST_URL:   ${{ steps.config.outputs.sonar_host_url }}
-          SONAR_TOKEN:      ${{ steps.config.outputs.sonar_token }}
-          SONAR_PROJECT_KEY: ${{ steps.config.outputs.sonar_project_key }}
-        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/sonar.sh"
+          SONAR_TOKEN: ${{ steps.config.outputs.sonar_token }}
+        with:
+          args: >
+            -Dsonar.host.url=${{ steps.config.outputs.sonar_host_url }}
+            -Dsonar.projectKey=${{ steps.config.outputs.sonar_project_key }}
+            -Dsonar.sources=${{ env.BUNDLE_DIR }}
 
       # -------- VERSION --------
       - name: Calculate version
