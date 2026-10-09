@@ -137,7 +137,7 @@ jobs:
           repository: ForgeCrux/apigee-linting-custom
           ref: develop
           path: apigee-linting-custom
-          token: ${{ steps.token-select.outputs.token }}
+          #token: ${{ steps.token-select.outputs.token }}
 
       - name: Lint stage
         env:
@@ -151,7 +151,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          
+
       - name: Sonar stage
         env:
           SONAR_HOST_URL:   ${{ steps.config.outputs.sonar_host_url }}

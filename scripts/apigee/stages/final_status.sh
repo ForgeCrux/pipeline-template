@@ -2,26 +2,24 @@
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 
-# GitHub exposes the job result as `job.status` (values: success,
-# failure, cancelled). The workflow maps that in. If it isn't set
-# (e.g. invoked outside a workflow job), default to COMPLETED so
-# the API never receives an unknown enum value.
+# GitHub exposes the job result as `job.status` (success, failure, cancelled).
+# Default to success if unset so the API never receives an unknown enum value.
 RAW_STATUS="${JOB_STATUS:-success}"
 
-# Normalize GitHub-style values to the service's expected enum.
-# pipeline_logs.py's JOB_STATUS_MAP does this too, but doing it here
-# guarantees a valid value even if the map drifts.
 case "$(echo "$RAW_STATUS" | tr '[:upper:]' '[:lower:]')" in
-  success)             NORMALIZED="COMPLETED" ;;
+  success)            NORMALIZED="COMPLETED" ;;
   failure|cancelled| \
-  canceled|timed_out)  NORMALIZED="FAILED" ;;
-  running)             NORMALIZED="RUNNING" ;;
-  *)                   NORMALIZED="COMPLETED" ;;
+  canceled|timed_out) NORMALIZED="FAILED" ;;
+  running)            NORMALIZED="RUNNING" ;;
+  *)                  NORMALIZED="COMPLETED" ;;
 esac
 
-log_line  EXECUTION FINAL_STATUS \
-  "GitHub Actions execution completed with status: $RAW_STATUS ($NORMALIZED)"
+# Stream a plain log line via pipeline_logs.py stdin (NOT via log_line,
+# which may not exist in older _common.sh revisions).
+printf '%s\n' "GitHub Actions execution completed with status: $RAW_STATUS ($NORMALIZED)" \
+  | python3 "$_LOGS_PY" stdin EXECUTION -- FINAL_STATUS >/dev/null 2>&1 || true
 
+# Emit the terminal event (emit_event exists in every _common.sh version).
 emit_event EXECUTION FINAL_STATUS "$NORMALIZED" \
   "GitHub Actions execution completed with status: $RAW_STATUS"
 
