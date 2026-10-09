@@ -68,7 +68,7 @@ env:
 
   # -------- Paths --------
   ROOT_TEMPLATE_SCRIPTS: pipeline-template/scripts
-  APIGEE_TEMPLATE_SCRIPTS: ${ROOT_TEMPLATE_SCRIPTS}/apigee
+  APIGEE_TEMPLATE_SCRIPTS: "${ROOT_TEMPLATE_SCRIPTS}/apigee"
 
 jobs:
   build-lint-deploy:
