@@ -74,3 +74,14 @@ append_output() {
   [ -n "${GITHUB_OUTPUT:-}" ] || return 0
   printf '%s=%s\n' "$1" "$2" >> "$GITHUB_OUTPUT"
 }
+
+# ------------------------------------------------------------------
+# Normalize credential env vars.
+#
+# google-github-actions/auth@v3 exposes its token via a step output
+# that the workflow maps to ACCESS_TOKEN. All stage scripts read
+# TOKEN. Bridge the two here so per-stage env edits aren't needed.
+# ------------------------------------------------------------------
+if [ -z "${TOKEN:-}" ] && [ -n "${ACCESS_TOKEN:-}" ]; then
+  export TOKEN="$ACCESS_TOKEN"
+fi

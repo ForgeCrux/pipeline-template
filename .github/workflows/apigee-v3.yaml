@@ -208,6 +208,7 @@ jobs:
       # -------- DEPLOY --------
       - name: Deploy stage
         env:
+          ACCESS_TOKEN:         ${{ steps.gcp-auth.outputs.access_token }}
           SERVICE_ACCOUNT_FILE: ${{ steps.config.outputs.apigee_serviceAccountFile }}
           REVISION:             ${{ steps.revision.outputs.revision }}
         run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/deploy.sh"
