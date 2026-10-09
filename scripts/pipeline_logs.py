@@ -57,10 +57,7 @@ class PipelineLogger:
         self.client_secret = os.getenv("CLIENT_SECRET", "")
         self.organization_id = os.getenv("ORGANIZATION_ID", "")
         self.flow_change_id = os.getenv("FLOW_CHANGE_ID", "")
-        self.pipeline_type = os.getenv(
-            "PL_PIPELINE_TYPE",
-            "ONBOARDING",
-        )
+        self.pipeline_type = os.getenv("PL_PIPELINE_TYPE","")
 
         self.token: Optional[str] = None
         self.last_token_refresh = 0.0
