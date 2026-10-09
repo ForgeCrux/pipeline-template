@@ -156,7 +156,7 @@ jobs:
             STEP_STATUS=FAILED
           fi
 
-          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" "$LOG_STEP" \
+          python3 pipeline-template/scripts/pipeline_logs.py event "$LOG_STAGE" -- "$LOG_STEP" \
             --status "$STEP_STATUS" \
             --message "$LOG_STEP finished with exit code $RESULT" || true
 
