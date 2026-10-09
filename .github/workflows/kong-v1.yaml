@@ -1,5 +1,6 @@
-name: Kong Konnect CICD
+name: Reusable Kong CI/CD
 
+on:
   workflow_call:
     inputs:
       environment:        { required: false, default: dev,   type: string }
@@ -8,27 +9,35 @@ name: Kong Konnect CICD
       cicd_config_url:    { required: false, default: "https://forgesphere.probestack.io/cicd-automation/v1/api/cicd-config", type: string }
       deploy_proxy:       { required: false, default: "kong", type: string }
       deck_version:       { required: false, default: "1.62.1", type: string }
-      validate_only:      { required: true,  default: false, type: boolean }
+      validate_only:      { required: false, default: false, type: boolean }
       deck_mode:          { required: false, default: apply, type: string }
       konnect_addr:       { required: false, default: "https://us.api.konghq.com", type: string }
       select_tag:         { required: false, default: "migrated-by:forgeshift-wso2-migrator", type: string }
       result_callback_url: { required: false, default: "", type: string }
       branch_name:        { required: false, type: string }
+      version:            { required: false, default: "", type: string }
 
     secrets:
-      cicd_profile_id:              { required: true }
-      GH_TOKEN:                     { required: true }
-      APP_ID:                       { required: true }
-      APP_PRIVATE_KEY:              { required: true }
-      PROB_SERVICE_TOKEN_URL:       { required: true }
-      PROB_SERVICE_TOKEN_CLIENT_ID: { required: true }
+      cicd_profile_id:                  { required: true }
+      GH_TOKEN:                         { required: true }
+      APP_ID:                           { required: true }
+      APP_PRIVATE_KEY:                  { required: true }
+      PROB_SERVICE_TOKEN_URL:           { required: true }
+      PROB_SERVICE_TOKEN_CLIENT_ID:     { required: true }
       PROB_SERVICE_TOKEN_CLIENT_SECRET: { required: true }
-      PROB_SERVICE_TOKEN_TENANT_ID: { required: true }
+      PROB_SERVICE_TOKEN_TENANT_ID:     { required: true }
+
       # Optional — for the flow resolver and log metadata.
-      FLOW_CHANGE_ID:               { required: false }
-      RESOURCE_ID:                  { required: false }
-      FLOW_TYPE:                    { required: false }
-      TOKEN_ISSUER_URL:             { required: false }
+      FLOW_CHANGE_ID:                   { required: false }
+      RESOURCE_ID:                      { required: false }
+      FLOW_TYPE:                        { required: false }
+      TOKEN_ISSUER_URL:                 { required: false }
+
+      # Nexus credentials — optional; caller must supply if validate_only is false.
+      NEXUS_URL:                        { required: false }
+      NEXUS_USERNAME:                   { required: false }
+      NEXUS_PASSWORD:                   { required: false }
+      NEXUS_REPOSITORY:                 { required: false }
 
 permissions:
   contents: read
@@ -40,34 +49,30 @@ env:
   CLIENT_ID:         ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
   CLIENT_SECRET:     ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
   ORGANIZATION_ID:   ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
+  PL_PIPELINE_TYPE:  'KONG'
 
-  # Pipeline type for this workflow (distinct from Apigee).
-  PL_PIPELINE_TYPE: 'KONG'
-
-  # Flow metadata sent with every event.
+  # -------- Flow metadata --------
   FLOW_TYPE:   ${{ secrets.FLOW_TYPE != '' && secrets.FLOW_TYPE || 'kong-services' }}
   RESOURCE_ID: ${{ secrets.RESOURCE_ID != '' && secrets.RESOURCE_ID || inputs.deploy_proxy }}
 
   # -------- Inputs consumed by stage scripts --------
-  APIGEE_ENV:            # not used — keep APIGEE_ENV out
-  APIGEE_ORG:            # not used
-  KONG_CONFIG_PATH:      ${{ inputs.kong_config_path }}
-  CONTROL_PLANE_NAME:    ${{ inputs.control_plane_name }}
-  DEPLOY_PROXY:          ${{ inputs.deploy_proxy }}
-  DECK_VERSION:          ${{ inputs.deck_version }}
-  DECK_MODE:             ${{ inputs.deck_mode }}
-  KONNECT_ADDR:          ${{ inputs.konnect_addr }}
-  SELECT_TAG:            ${{ inputs.select_tag }}
-  INPUT_VERSION:         ${{ inputs.version }}
-  RESULT_CALLBACK_URL:   ${{ inputs.result_callback_url }}
+  KONG_CONFIG_PATH:    ${{ inputs.kong_config_path }}
+  CONTROL_PLANE_NAME:  ${{ inputs.control_plane_name }}
+  DEPLOY_PROXY:        ${{ inputs.deploy_proxy }}
+  DECK_VERSION:        ${{ inputs.deck_version }}
+  DECK_MODE:           ${{ inputs.deck_mode }}
+  KONNECT_ADDR:        ${{ inputs.konnect_addr }}
+  SELECT_TAG:          ${{ inputs.select_tag }}
+  INPUT_VERSION:       ${{ inputs.version }}
+  RESULT_CALLBACK_URL: ${{ inputs.result_callback_url }}
 
-  # -------- Secrets exposed to stage scripts --------
+  # -------- ForgeSphere CICD config --------
   CICD_CONFIG_URL: ${{ inputs.cicd_config_url }}
   CICD_CONFIG_ID:  ${{ secrets.cicd_profile_id }}
 
   # -------- Paths --------
-  ROOT_TEMPLATE_SCRIPTS:  pipeline-template/scripts
-  KONG_TEMPLATE_SCRIPTS:  pipeline-template/scripts/kong
+  ROOT_TEMPLATE_SCRIPTS: pipeline-template/scripts
+  KONG_TEMPLATE_SCRIPTS: pipeline-template/scripts/kong
 
 jobs:
   kong-deploy:
@@ -77,13 +82,13 @@ jobs:
 
     permissions:
       contents: read
-      id-token: write
 
     environment:
       name: ${{ inputs.environment }}
 
     steps:
       - name: Checkout application repository
+        id: checkout
         uses: actions/checkout@v4
 
       - name: Checkout pipeline template
@@ -98,7 +103,7 @@ jobs:
           RAW_FLOW_CHANGE_ID: ${{ secrets.FLOW_CHANGE_ID }}
         run: bash "${KONG_TEMPLATE_SCRIPTS}/resolve_flow_change_id.sh"
 
-      # -------- GET SERVICE TOKEN --------
+      # -------- SERVICE TOKEN --------
       - name: Get ForgeSphere service token
         id: service-token
         run: bash "${KONG_TEMPLATE_SCRIPTS}/stages/service_token.sh"
@@ -108,7 +113,7 @@ jobs:
         id: cicd-config
         env:
           SERVICE_ACCESS_TOKEN: ${{ steps.service-token.outputs.access_token }}
-          ENVIRONMENT: ${{ inputs.environment }}
+          ENVIRONMENT:          ${{ inputs.environment }}
         run: bash "${KONG_TEMPLATE_SCRIPTS}/stages/load_cicd_config.sh"
 
       # -------- INSTALL DECK --------
@@ -120,33 +125,33 @@ jobs:
       - name: Resolve Kong configuration
         id: kong-config
         env:
-          INPUT_KONNECT_ADDR:    ${{ inputs.konnect_addr }}
-          INPUT_CONTROL_PLANE:   ${{ inputs.control_plane_name }}
-          INPUT_DECK_MODE:       ${{ inputs.deck_mode }}
-          CONFIG_KONNECT_ADDR:   ${{ steps.cicd-config.outputs.kong_host_url }}
-          CONFIG_CONTROL_PLANE:  ${{ steps.cicd-config.outputs.kong_control_plane }}
-          CONFIG_DECK_MODE:      ${{ steps.cicd-config.outputs.kong_deck_mode }}
-          CONFIG_KONNECT_PAT:    ${{ steps.cicd-config.outputs.kong_pat_token }}
+          INPUT_KONNECT_ADDR:   ${{ inputs.konnect_addr }}
+          INPUT_CONTROL_PLANE:  ${{ inputs.control_plane_name }}
+          INPUT_DECK_MODE:      ${{ inputs.deck_mode }}
+          CONFIG_KONNECT_ADDR:  ${{ steps.cicd-config.outputs.kong_host_url }}
+          CONFIG_CONTROL_PLANE: ${{ steps.cicd-config.outputs.kong_control_plane }}
+          CONFIG_DECK_MODE:     ${{ steps.cicd-config.outputs.kong_deck_mode }}
+          CONFIG_KONNECT_PAT:   ${{ steps.cicd-config.outputs.kong_pat_token }}
         run: bash "${KONG_TEMPLATE_SCRIPTS}/stages/resolve_kong_config.sh"
 
       # -------- VALIDATE --------
       - name: Validate Kong configuration
         id: validate
         env:
-          KONNECT_ADDR:      ${{ steps.kong-config.outputs.konnect_addr }}
+          KONNECT_ADDR:       ${{ steps.kong-config.outputs.konnect_addr }}
           CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
-          DECK_MODE:         ${{ steps.kong-config.outputs.deck_mode }}
-          KONNECT_TOKEN:     ${{ steps.kong-config.outputs.konnect_token }}
+          DECK_MODE:          ${{ steps.kong-config.outputs.deck_mode }}
+          KONNECT_TOKEN:      ${{ steps.kong-config.outputs.konnect_token }}
         run: bash "${KONG_TEMPLATE_SCRIPTS}/stages/validate.sh"
 
       # -------- DIFF --------
       - name: Diff Kong configuration
         id: diff
         env:
-          KONNECT_ADDR:      ${{ steps.kong-config.outputs.konnect_addr }}
+          KONNECT_ADDR:       ${{ steps.kong-config.outputs.konnect_addr }}
           CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
-          DECK_MODE:         ${{ steps.kong-config.outputs.deck_mode }}
-          KONNECT_TOKEN:     ${{ steps.kong-config.outputs.konnect_token }}
+          DECK_MODE:          ${{ steps.kong-config.outputs.deck_mode }}
+          KONNECT_TOKEN:      ${{ steps.kong-config.outputs.konnect_token }}
         run: bash "${KONG_TEMPLATE_SCRIPTS}/stages/diff.sh"
 
       # -------- DEPLOY --------
@@ -155,10 +160,10 @@ jobs:
         if: ${{ inputs.validate_only == false }}
         continue-on-error: true
         env:
-          KONNECT_ADDR:      ${{ steps.kong-config.outputs.konnect_addr }}
+          KONNECT_ADDR:       ${{ steps.kong-config.outputs.konnect_addr }}
           CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
-          DECK_MODE:         ${{ steps.kong-config.outputs.deck_mode }}
-          KONNECT_TOKEN:     ${{ steps.kong-config.outputs.konnect_token }}
+          DECK_MODE:          ${{ steps.kong-config.outputs.deck_mode }}
+          KONNECT_TOKEN:      ${{ steps.kong-config.outputs.konnect_token }}
         run: bash "${KONG_TEMPLATE_SCRIPTS}/stages/deploy.sh"
 
       # -------- DUMP --------
@@ -167,9 +172,9 @@ jobs:
         if: ${{ inputs.validate_only == false }}
         continue-on-error: true
         env:
-          KONNECT_ADDR:      ${{ steps.kong-config.outputs.konnect_addr }}
+          KONNECT_ADDR:       ${{ steps.kong-config.outputs.konnect_addr }}
           CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
-          KONNECT_TOKEN:     ${{ steps.kong-config.outputs.konnect_token }}
+          KONNECT_TOKEN:      ${{ steps.kong-config.outputs.konnect_token }}
         run: bash "${KONG_TEMPLATE_SCRIPTS}/stages/dump.sh"
 
       # -------- ARTIFACT VERSION --------
@@ -181,7 +186,7 @@ jobs:
       - name: Package Kong Nexus artifact
         id: package
         env:
-          ARTIFACT_VERSION:  ${{ steps.artifact-version.outputs.version }}
+          ARTIFACT_VERSION:   ${{ steps.artifact-version.outputs.version }}
           CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
         run: bash "${KONG_TEMPLATE_SCRIPTS}/stages/package.sh"
 
@@ -190,11 +195,11 @@ jobs:
         id: nexus-upload
         if: ${{ inputs.validate_only == false }}
         env:
-          NEXUS_URL:         ${{ secrets.NEXUS_URL }}
-          NEXUS_USERNAME:    ${{ secrets.NEXUS_USERNAME }}
-          NEXUS_PASSWORD:    ${{ secrets.NEXUS_PASSWORD }}
-          NEXUS_REPOSITORY:  ${{ secrets.NEXUS_REPOSITORY }}
-          ARTIFACT_VERSION:  ${{ steps.artifact-version.outputs.version }}
+          NEXUS_URL:          ${{ secrets.NEXUS_URL }}
+          NEXUS_USERNAME:     ${{ secrets.NEXUS_USERNAME }}
+          NEXUS_PASSWORD:     ${{ secrets.NEXUS_PASSWORD }}
+          NEXUS_REPOSITORY:   ${{ secrets.NEXUS_REPOSITORY }}
+          ARTIFACT_VERSION:   ${{ steps.artifact-version.outputs.version }}
           CONTROL_PLANE_NAME: ${{ steps.kong-config.outputs.control_plane_name }}
         run: bash "${KONG_TEMPLATE_SCRIPTS}/stages/nexus.sh"
 
