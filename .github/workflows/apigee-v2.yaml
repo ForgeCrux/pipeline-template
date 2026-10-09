@@ -75,29 +75,25 @@ on:
       TOKEN_ISSUER_URL:
         required: false
 
-      ORGANIZATION_ID:
-        required: false
-
 permissions:
   contents: read
 
 env:
   RESOURCE_TYPE: ${{ inputs.resourcetype }}
   BUNDLE_DIR: ${{ inputs.resourcetype == 'apis' && 'apiproxy' || 'sharedflowbundle' }}
-  EXECUTION_LOG_API_URL: 'https://forgesphere.probestack.io/pipeline-logs'
   LOG_BUFFER_SIZE: '50'
   LOG_FLUSH_INTERVAL: '2'
   LOG_REQUEST_TIMEOUT: '10'
   LOG_DRAIN_TIMEOUT: '5'
 
   # Async pipeline log streaming
-  PIPELINE_LOGS_URL: ${{ secrets.PIPELINE_LOGS_URL }}
+  PIPELINE_LOGS_URL: 'https://forgesphere.probestack.io/pipeline-logs'
   TOKEN_ISSUER_URL: ${{ secrets.TOKEN_ISSUER_URL }}
-  CLIENT_ID: ${{ secrets.PIPELINE_LOGS_CLIENT_ID }}
-  CLIENT_SECRET: ${{ secrets.PIPELINE_LOGS_CLIENT_SECRET }}
-  ORGANIZATION_ID: ${{ secrets.ORGANIZATION_ID }}
+  CLIENT_ID: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
+  CLIENT_SECRET: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
+  ORGANIZATION_ID: ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
   FLOW_CHANGE_ID: ${{ secrets.FLOW_CHANGE_ID != '' && secrets.FLOW_CHANGE_ID || github.run_id }}
-  PL_PIPELINE_TYPE: APIGEE
+  PL_PIPELINE_TYPE: ${{ secrets.FLOW_TYPE }}
 
 jobs:
   build-lint-deploy:
