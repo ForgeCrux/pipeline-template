@@ -81,7 +81,9 @@ env:
   CLIENT_SECRET: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
   ORGANIZATION_ID: ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
   FLOW_CHANGE_ID: ${{ secrets.FLOW_CHANGE_ID != '' && secrets.FLOW_CHANGE_ID || github.run_id }}
-  PL_PIPELINE_TYPE: ${{ secrets.FLOW_TYPE }}
+  PL_PIPELINE_TYPE: APIGEE
+  FLOW_TYPE: ${{ secrets.FLOW_TYPE }}
+  RESOURCE_ID: ${{ secrets.RESOURCE_ID }}
 
 jobs:
   build-lint-deploy:
