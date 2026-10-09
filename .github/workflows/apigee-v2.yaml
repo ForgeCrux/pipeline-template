@@ -39,50 +39,40 @@ on:
         type: string
 
     secrets:
-      CICD_PROFILE_ID:
-        required: true
-      GH_TOKEN:
-        required: true
-      APP_ID:
-        required: true
-      APP_PRIVATE_KEY:
-        required: true
-      PROB_SERVICE_TOKEN_URL:
-        required: true
-      PROB_SERVICE_TOKEN_CLIENT_ID:
-        required: true
-      PROB_SERVICE_TOKEN_CLIENT_SECRET:
-        required: true
-      PROB_SERVICE_TOKEN_TENANT_ID:
-        required: true
-      FLOW_CHANGE_ID:
-        required: true
-      RESOURCE_ID:
-        required: true
-      FLOW_TYPE:
-        required: true
-      TOKEN_ISSUER_URL:
-        required: false
+      CICD_PROFILE_ID:              { required: true }
+      GH_TOKEN:                     { required: true }
+      APP_ID:                       { required: true }
+      APP_PRIVATE_KEY:              { required: true }
+      PROB_SERVICE_TOKEN_URL:       { required: true }
+      PROB_SERVICE_TOKEN_CLIENT_ID: { required: true }
+      PROB_SERVICE_TOKEN_CLIENT_SECRET: { required: true }
+      PROB_SERVICE_TOKEN_TENANT_ID: { required: true }
+      FLOW_CHANGE_ID: { required: false }
+      RESOURCE_ID:    { required: false }
+      FLOW_TYPE:      { required: false }
+
+      TOKEN_ISSUER_URL: { required: false }
 
 permissions:
   contents: read
 
 env:
   RESOURCE_TYPE: ${{ inputs.resourcetype }}
-  BUNDLE_DIR: ${{ inputs.resourcetype == 'apis' && 'apiproxy' || 'sharedflowbundle' }}
+  BUNDLE_DIR:    ${{ inputs.resourcetype == 'apis' && 'apiproxy' || 'sharedflowbundle' }}
   LOG_BUFFER_SIZE: '50'
   LOG_FLUSH_INTERVAL: '2'
   LOG_REQUEST_TIMEOUT: '10'
   LOG_DRAIN_TIMEOUT: '5'
 
   PIPELINE_LOGS_URL: 'https://forgesphere.probestack.io/pipeline-logs'
-  TOKEN_ISSUER_URL: ${{ secrets.PROB_SERVICE_TOKEN_URL }}
-  CLIENT_ID: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
-  CLIENT_SECRET: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
-  ORGANIZATION_ID: ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
-  FLOW_CHANGE_ID: ${{ secrets.FLOW_CHANGE_ID != '' && secrets.FLOW_CHANGE_ID || github.run_id }}
-  PL_PIPELINE_TYPE: APIGEE
-  FLOW_TYPE: ${{ secrets.FLOW_TYPE }}
+  TOKEN_ISSUER_URL:  ${{ secrets.PROB_SERVICE_TOKEN_URL }}
+  CLIENT_ID:         ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
+  CLIENT_SECRET:     ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
+  ORGANIZATION_ID:   ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
+
+  PL_PIPELINE_TYPE: 'APIGEE'
+
+  FLOW_TYPE:   ${{ inputs.resourcetype }}
   RESOURCE_ID: ${{ secrets.RESOURCE_ID }}
 
 jobs:

@@ -59,8 +59,8 @@ LOG_CHUNK_SIZE = 200
 JOB_STATUS_MAP = {
     "success": "COMPLETED",
     "failure": "FAILED",
-    "cancelled": "CANCELLED",
-    "canceled": "CANCELLED",
+    "cancelled": "FAILED",
+    "canceled": "FAILED",
 }
 
 
@@ -216,36 +216,44 @@ class PipelineLogger:
         """
         Fields included on EVERY event, regardless of type.
 
-        The `stepKey` field is deliberately omitted — the Pipeline Logs
-        API rejects it with 400 (the Bash reference script never sends
-        it either).
+        Notes:
+        - `stepKey` is deliberately omitted — the API rejects it with 400.
+        - `flow` is a nested object; the service uses it on the first
+            event of a run to create or associate the flow.
+        - `organizationId` inside `flow` must be the tenant/organization
+            id from ORGANIZATION_ID (the token issuer's tenant), NOT the
+            Apigee org name.
+        - `trigger` is a nested object identifying the source of the run.
         """
         envelope: dict = {
             "flowChangeId": self.flow_change_id,
             "pipelineType": self.pipeline_type,
         }
 
-        # Flow details — only include when actually known.
+        # --- flow object ---------------------------------------------------
+        flow: dict = {}
         if self.flow_type:
-            envelope["flowType"] = self.flow_type
-        if self.apigee_org:
-            envelope["organizationId"] = self.apigee_org
+            flow["flowType"] = self.flow_type
+        if self.organization_id:
+            flow["organizationId"] = self.organization_id
         if self.resource_id:
-            envelope["resourceId"] = self.resource_id
+            flow["resourceId"] = self.resource_id
 
-        # Trigger details — nested so the schema stays extensible.
-        trigger: dict = {}
+        if flow:
+            envelope["flow"] = flow
+
+        # --- trigger object ------------------------------------------------
+        trigger: dict = {"type": "GITHUB"}
         if self.github_actor:
-            trigger["actor"] = self.github_actor
+            trigger["githubActor"] = self.github_actor
         if self.github_run_id:
-            trigger["runId"] = self.github_run_id
+            trigger["githubRunId"] = self.github_run_id
         if self.github_sha:
-            trigger["sha"] = self.github_sha
+            trigger["commitSha"] = self.github_sha
         if self.github_branch:
             trigger["branch"] = self.github_branch
 
-        if trigger:
-            envelope["trigger"] = trigger
+        envelope["trigger"] = trigger
 
         return envelope
 

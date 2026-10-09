@@ -67,7 +67,8 @@ env:
   INPUT_VERSION:   ${{ inputs.version }}
 
   # -------- Paths --------
-  TEMPLATE_SCRIPTS: pipeline-template/scripts/apigee
+  ROOT_TEMPLATE_SCRIPTS: pipeline-template/scripts
+  APIGEE_TEMPLATE_SCRIPTS: ${ROOT_TEMPLATE_SCRIPTS}/apigee
 
 jobs:
   build-lint-deploy:
@@ -98,20 +99,20 @@ jobs:
       - name: Resolve Flow Change ID
         env:
           RAW_FLOW_CHANGE_ID: ${{ secrets.FLOW_CHANGE_ID }}
-        run: bash "${TEMPLATE_SCRIPTS}/resolve_flow_change_id.sh"
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/resolve_flow_change_id.sh"
 
       # -------- SETUP --------
       - name: Setup stage
-        run: bash "${TEMPLATE_SCRIPTS}/stages/setup.sh"
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/setup.sh"
 
       # -------- VALIDATION --------
       - name: Validation stage
-        run: bash "${TEMPLATE_SCRIPTS}/stages/validation.sh"
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/validation.sh"
 
       # -------- FORGESPHERE CONFIGURATION --------
       - name: ForgeSphere configuration stage
         id: config
-        run: bash "${TEMPLATE_SCRIPTS}/forgesphere_config.sh"
+        run: bash "${ROOT_TEMPLATE_SCRIPTS}/forgesphere_config.sh"
 
       # -------- GITHUB APP TOKEN --------
       - name: Generate GitHub App token
@@ -124,7 +125,7 @@ jobs:
 
       - name: Select GitHub token
         id: token-select
-        run: bash "${TEMPLATE_SCRIPTS}/stages/select_github_token.sh"
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/select_github_token.sh"
 
       # -------- LINT --------
       - name: Lint stage
@@ -133,20 +134,20 @@ jobs:
           SONAR_HOST_URL:   ${{ steps.config.outputs.sonar_host_url }}
           SONAR_TOKEN:      ${{ steps.config.outputs.sonar_token }}
           SONAR_PROJECT_KEY: ${{ steps.config.outputs.sonar_project_key }}
-        run: bash "${TEMPLATE_SCRIPTS}/stages/lint.sh"
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/lint.sh"
 
       # -------- SONAR --------
       - name: Sonar stage
-        run: bash "${TEMPLATE_SCRIPTS}/stages/sonar.sh"
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/sonar.sh"
 
       # -------- VERSION --------
       - name: Calculate version
         id: version
-        run: bash "${TEMPLATE_SCRIPTS}/stages/version.sh"
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/version.sh"
 
       # -------- PACKAGE --------
       - name: Package stage
-        run: bash "${TEMPLATE_SCRIPTS}/stages/package.sh"
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/package.sh"
 
       # -------- NEXUS --------
       - name: Nexus stage
@@ -157,7 +158,7 @@ jobs:
           NEXUS_PASSWORD:   ${{ steps.config.outputs.nexus_password }}
           MERGE_BRANCH:     ${{ steps.config.outputs.merge_branch }}
           PACKAGE_VERSION:  ${{ steps.version.outputs.version }}
-        run: bash "${TEMPLATE_SCRIPTS}/stages/nexus.sh"
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/nexus.sh"
 
       # -------- GCP AUTH --------
       - name: Authenticate GitHub to Google Cloud
@@ -174,34 +175,34 @@ jobs:
           cleanup_credentials:        true
 
       - name: GCP auth stage
-        run: bash "${TEMPLATE_SCRIPTS}/stages/gcp_auth.sh"
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/gcp_auth.sh"
 
       # -------- IMPORT --------
       - name: Import stage
-        run: bash "${TEMPLATE_SCRIPTS}/stages/import.sh"
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/import.sh"
 
       # -------- REVISION --------
       - name: Revision stage
         id: revision
-        run: bash "${TEMPLATE_SCRIPTS}/stages/revision.sh"
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/revision.sh"
 
       # -------- DEPLOY --------
       - name: Deploy stage
         env:
           SERVICE_ACCOUNT_FILE: ${{ steps.config.outputs.apigee_serviceAccountFile }}
           REVISION:             ${{ steps.revision.outputs.revision }}
-        run: bash "${TEMPLATE_SCRIPTS}/stages/deploy.sh"
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/deploy.sh"
 
       # -------- VERIFY --------
       - name: Verify stage
-        run: bash "${TEMPLATE_SCRIPTS}/stages/verify.sh"
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/verify.sh"
 
       # -------- CLEANUP --------
       - name: Cleanup
         if: always()
-        run: bash "${TEMPLATE_SCRIPTS}/stages/cleanup.sh"
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/cleanup.sh"
 
       # -------- FINAL STATUS --------
       - name: Final status
         if: always()
-        run: bash "${TEMPLATE_SCRIPTS}/stages/final_status.sh"
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/final_status.sh"
