@@ -129,6 +129,7 @@ jobs:
 
       # -------- LINT --------
       - name: Checkout lint rules
+        if: steps.token-select.outputs.token != ''
         continue-on-error: true
         uses: actions/checkout@v4
         with:
@@ -227,4 +228,6 @@ jobs:
       # -------- FINAL STATUS --------
       - name: Final status
         if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
         run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/final_status.sh"
