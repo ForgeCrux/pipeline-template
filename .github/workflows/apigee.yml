@@ -1,57 +1,241 @@
-name: Apigee CI/CD Template
+name: Reusable Apigee CI/CD
 
 on:
   workflow_call:
     inputs:
-      project_id:
-        required: true
-        type: string
-      region:
-        required: true
-        type: string
-      image_name:
-        required: true
-        type: string
-    secrets: {}
+      apigee_org:      { required: true,  type: string }
+      apigee_env:      { required: true,  type: string }
+      deploy_proxy:    { required: true,  type: string }
+      resourcetype:    { required: true,  type: string }
+      node_version:    { required: false, default: '18', type: string }
+      branch_name:     { required: false, type: string }
+      cicd_config_url: { required: false, default: 'https://forgesphere.probestack.io/cicd-automation/v1/api/cicd-config', type: string }
+      version:         { required: false, default: '', type: string }
+
+    secrets:
+      CICD_PROFILE_ID:              { required: true }
+      GH_TOKEN:                     { required: true }
+      APP_ID:                       { required: true }
+      APP_PRIVATE_KEY:              { required: true }
+      PROB_SERVICE_TOKEN_URL:       { required: true }
+      PROB_SERVICE_TOKEN_CLIENT_ID: { required: true }
+      PROB_SERVICE_TOKEN_CLIENT_SECRET: { required: true }
+      PROB_SERVICE_TOKEN_TENANT_ID: { required: true }
+      # Optional – kept for backward compatibility.
+      FLOW_CHANGE_ID:               { required: false }
+      RESOURCE_ID:                  { required: false }
+      FLOW_TYPE:                    { required: false }
+      TOKEN_ISSUER_URL:             { required: false }
 
 permissions:
-  id-token: write
   contents: read
 
-jobs:
-  deploy:
-    runs-on: [self-hosted, kubernetes, org-runner]
+env:
+  # -------- Resource layout --------
+  RESOURCE_TYPE: ${{ inputs.resourcetype }}
+  BUNDLE_DIR:    ${{ inputs.resourcetype == 'apis' && 'apiproxy' || 'sharedflowbundle' }}
 
-    env:
-      PROJECT_ID: ${{ inputs.project_id }}
-      REGION: ${{ inputs.region }}
-      ARTIFACT_REGISTRY: us-central1-docker.pkg.dev
-      REPOSITORY: apigee
+  # -------- Pipeline Logs service --------
+  PIPELINE_LOGS_URL: 'https://forgesphere.probestack.io/pipeline-logs'
+  TOKEN_ISSUER_URL:  ${{ secrets.PROB_SERVICE_TOKEN_URL }}
+  CLIENT_ID:         ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
+  CLIENT_SECRET:     ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
+  ORGANIZATION_ID:   ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
+  PL_PIPELINE_TYPE:  'APIGEE'
+
+  # -------- Flow / trigger metadata --------
+  FLOW_TYPE:   ${{ secrets.FLOW_TYPE }}
+  RESOURCE_ID: ${{ secrets.RESOURCE_ID }}
+  APIGEE_ORG:  ${{ inputs.apigee_org }}
+
+  # -------- Secrets exposed to stage scripts --------
+  GH_TOKEN:                     ${{ secrets.GH_TOKEN }}
+  APP_ID:                       ${{ secrets.APP_ID }}
+  APP_PRIVATE_KEY:              ${{ secrets.APP_PRIVATE_KEY }}
+  PROB_SERVICE_TOKEN_URL:       ${{ secrets.PROB_SERVICE_TOKEN_URL }}
+  PROB_SERVICE_TOKEN_CLIENT_ID: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
+  PROB_SERVICE_TOKEN_CLIENT_SECRET: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
+  PROB_SERVICE_TOKEN_TENANT_ID: ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
+  CICD_CONFIG_ID:               ${{ secrets.CICD_PROFILE_ID }}
+
+  # -------- Inputs exposed to stage scripts --------
+  APIGEE_ENV:      ${{ inputs.apigee_env }}
+  DEPLOY_PROXY:    ${{ inputs.deploy_proxy }}
+  NODE_VERSION:    ${{ inputs.node_version }}
+  BRANCH_NAME:     ${{ inputs.branch_name }}
+  CICD_CONFIG_URL: ${{ inputs.cicd_config_url }}
+  INPUT_VERSION:   ${{ inputs.version }}
+
+  # -------- Paths --------
+  ROOT_TEMPLATE_SCRIPTS:   pipeline-template/scripts
+  APIGEE_TEMPLATE_SCRIPTS: pipeline-template/scripts/apigee
+
+jobs:
+  build-lint-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout caller repository
+        uses: actions/checkout@v4
 
-      # ---- Lint
-      - name: Apigee Lint
-        run: |
-          npm install -g apigeelint
-          apigeelint -s ./apigee -f table
+      - name: Checkout pipeline template
+        uses: actions/checkout@v4
+        with:
+          repository: ForgeCrux/pipeline-template
+          ref: main
+          path: pipeline-template
 
-      - name: JSON Lint
-        run: |
-          npm install -g jsonlint
-          find . -name "*.json" -exec jsonlint -q {} \;
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
 
-      # ---- Build & Push
-      - name: Build and Push
-        run: |
-          docker build -t $ARTIFACT_REGISTRY/$PROJECT_ID/$REPOSITORY/${{ inputs.image_name }}:${{ github.sha }} .
-          docker push $ARTIFACT_REGISTRY/$PROJECT_ID/$REPOSITORY/${{ inputs.image_name }}:${{ github.sha }}
+      # -------- Resolve FLOW_CHANGE_ID to a bare UUID --------
+      - name: Resolve Flow Change ID
+        env:
+          RAW_FLOW_CHANGE_ID: ${{ secrets.FLOW_CHANGE_ID }}
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/resolve_flow_change_id.sh"
 
-      # ---- Deploy
-      - name: Deploy to Apigee
-        run: |
-          gcloud apigee apis import \
-            --name=my-api \
-            --file=apigee.zip \
-            --organization=$PROJECT_ID
+      # -------- SETUP --------
+      - name: Setup stage
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/setup.sh"
+
+      # -------- VALIDATION --------
+      - name: Validation stage
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/validation.sh"
+
+      # -------- FORGESPHERE CONFIGURATION --------
+      - name: ForgeSphere configuration stage
+        id: config
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/forgesphere_config.sh"
+
+      # -------- GITHUB APP TOKEN --------
+      - name: Generate GitHub App token
+        id: app-token
+        
+        continue-on-error: true
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Select GitHub token
+        id: token-select
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/select_github_token.sh"
+
+      # -------- LINT --------
+      - name: Checkout lint rules
+        if: steps.token-select.outputs.token != ''
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: ForgeCrux/apigee-linting-custom
+          ref: develop
+          path: apigee-linting-custom
+          #token: ${{ steps.token-select.outputs.token }}
+
+      - name: Lint stage
+        env:
+          GH_LINT_TOKEN:    ${{ steps.token-select.outputs.token }}
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/lint.sh"
+
+      # -------- SONAR --------
+      - name: Setup Java
+        if: steps.config.outputs.sonar_host_url != ''
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Sonar stage
+        env:
+          SONAR_HOST_URL:   ${{ steps.config.outputs.sonar_host_url }}
+          SONAR_TOKEN:      ${{ steps.config.outputs.sonar_token }}
+          SONAR_PROJECT_KEY: ${{ steps.config.outputs.sonar_project_key }}
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/sonar.sh"
+
+      # -------- VERSION --------
+      - name: Calculate version
+        id: version
+        #if: steps.config.outputs.merge_branch == github.ref_name
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/version.sh"
+
+      # -------- PACKAGE --------
+      - name: Package stage
+        #if: steps.config.outputs.merge_branch == github.ref_name
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/package.sh"
+
+      # -------- NEXUS --------
+      - name: Nexus stage
+        if: steps.config.outputs.merge_branch == github.ref_name
+        env:
+          NEXUS_URL:        ${{ steps.config.outputs.nexus_url }}
+          NEXUS_REPOSITORY: ${{ steps.config.outputs.nexus_repository }}
+          NEXUS_USERNAME:   ${{ steps.config.outputs.nexus_username }}
+          NEXUS_PASSWORD:   ${{ steps.config.outputs.nexus_password }}
+          MERGE_BRANCH:     ${{ steps.config.outputs.merge_branch }}
+          PACKAGE_VERSION:  ${{ steps.version.outputs.version }}
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/nexus.sh"
+
+      # -------- GCP AUTH --------
+      - name: Authenticate GitHub to Google Cloud
+        id: gcp-auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ steps.config.outputs.apigee_workload_identity_provider }}
+          service_account:            ${{ steps.config.outputs.apigee_serviceAccountEmail }}
+          token_format:               access_token
+          access_token_lifetime:      3600s
+          access_token_scopes:        https://www.googleapis.com/auth/cloud-platform
+          create_credentials_file:    true
+          export_environment_variables: true
+          cleanup_credentials:        true
+
+      - name: GCP auth stage
+        env:
+          ACCESS_TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/gcp_auth.sh"
+
+      # -------- IMPORT --------
+      - name: Import stage
+        env:
+          ACCESS_TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/import.sh"
+
+      # -------- REVISION --------
+      - name: Revision stage
+        id: revision
+        env:
+          ACCESS_TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/revision.sh"
+
+      # -------- DEPLOY --------
+      - name: Deploy stage
+        env:
+          ACCESS_TOKEN:         ${{ steps.gcp-auth.outputs.access_token }}
+          SERVICE_ACCOUNT_FILE: ${{ steps.config.outputs.apigee_serviceAccountFile }}
+          REVISION:             ${{ steps.revision.outputs.revision }}
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/deploy.sh"
+
+      # -------- VERIFY --------
+      - name: Verify stage
+        env:
+          ACCESS_TOKEN: ${{ steps.gcp-auth.outputs.access_token }}
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/verify.sh"
+
+      # -------- CLEANUP --------
+      - name: Cleanup
+        if: always()
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/cleanup.sh"
+
+      # -------- FINAL STATUS --------
+      - name: Final status
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/final_status.sh"
