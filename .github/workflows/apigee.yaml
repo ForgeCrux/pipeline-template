@@ -158,7 +158,7 @@ jobs:
       - name: Sonar stage
         env:
           SONAR_HOST_URL:    ${{ steps.config.outputs.sonar_host_url }}
-          SONAR_TOKEN:       ${{ steps.config.outputs.sonar_token }}
+          SONAR_TOKEN:       ${{ steps.config.outputs.sonar_token    != '' && steps.config.outputs.sonar_token    || '80c7767c7aa19b416d1d93d79e97f42d22f8ba0b' }}
           SONAR_PROJECT_KEY: ${{ steps.config.outputs.sonar_project_key }}
         run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/sonar.sh"
 
