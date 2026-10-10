@@ -3,66 +3,11 @@ name: Reusable Apigee Promote / Rollback
 on:
   workflow_dispatch:
     inputs:
-      operation:
-        description: "Deployment operation: promote or rollback"
-        required: true
-        type: choice
-        options: [promote, rollback]
-
-      apigee_org:
-        description: "Target Apigee X organization"
-        required: true
-        type: string
-
-      apigee_env:
-        description: "Target Apigee X environment"
-        required: true
-        type: string
-
-      deploy_proxy:
-        description: "API Proxy or Shared Flow name"
-        required: true
-        type: string
-
-      resourcetype:
-        description: "Apigee resource type"
-        required: true
-        type: choice
-        options: [apis, sharedflows]
-
-      nexus_version:
-        description: "Exact Nexus version to promote or rollback"
-        required: true
-        type: string
-
-      nexus_artifact_name:
-        description: "Optional Nexus artifact filename"
-        required: false
-        default: ""
-        type: string
-
-      token_service_url:
-        description: "Service used to obtain Apigee OAuth access token"
-        required: false
-        default: "https://token-service-113875395623.us-central1.run.app/token"
-        type: string
-
-      cicd_config_url:
-        description: "ForgeSphere CI/CD configuration API"
-        required: false
-        default: "https://forgesphere.probestack.io/cicd-automation/v1/api/cicd-config"
-        type: string
-
-      cicd_profile_id:
-        description: "ForgeSphere CI/CD profile ID"
-        required: true
-        type: string
-
-      flow_change_id:
-        description: "Optional flow change UUID to associate this run with"
-        required: false
-        default: ""
-        type: string
+      operation:       { required: true,  type: choice, options: [promote, rollback], description: "Deployment operation: promote or rollback" }
+      deploy_proxy:    { required: true,  type: string, description: "API Proxy or Shared Flow name" }
+      nexus_version:   { required: true,  type: string, description: "Exact Nexus version to promote or rollback" }
+      cicd_profile_id: { required: true,  type: string, description: "ForgeSphere CI/CD profile ID" }
+      flow_change_id:  { required: false, default: "", type: string, description: "Optional flow change UUID to associate this run with" }
 
 permissions:
   contents: read
@@ -77,26 +22,16 @@ env:
   ORGANIZATION_ID:   ${{ secrets.TENANT_ID }}
   PL_PIPELINE_TYPE:  'APIGEE'
 
-  # -------- Flow metadata --------
-  FLOW_TYPE:   ${{ inputs.resourcetype }}
-  RESOURCE_ID: ${{ inputs.deploy_proxy }}
+  # -------- Inputs (only what the operator chooses) --------
+  OPERATION:           ${{ inputs.operation }}
+  DEPLOY_PROXY:        ${{ inputs.deploy_proxy }}
+  NEXUS_VERSION:       ${{ inputs.nexus_version }}
+  CICD_CONFIG_ID:      ${{ inputs.cicd_profile_id }}
+  RAW_FLOW_CHANGE_ID:  ${{ inputs.flow_change_id }}
 
-  # -------- Inputs consumed by stage scripts --------
-  OPERATION:            ${{ inputs.operation }}
-  APIGEE_ORG:           ${{ inputs.apigee_org }}
-  APIGEE_ENV:           ${{ inputs.apigee_env }}
-  DEPLOY_PROXY:         ${{ inputs.deploy_proxy }}
-  RESOURCE_TYPE:        ${{ inputs.resourcetype }}
-  NEXUS_VERSION:        ${{ inputs.nexus_version }}
-  NEXUS_ARTIFACT_NAME:  ${{ inputs.nexus_artifact_name }}
-  TOKEN_SERVICE_URL:    ${{ inputs.token_service_url }}
-  CICD_CONFIG_URL:      ${{ inputs.cicd_config_url }}
-  CICD_CONFIG_ID:       ${{ inputs.cicd_profile_id }}
-  RAW_FLOW_CHANGE_ID:   ${{ inputs.flow_change_id }}
-
-  # -------- Paths (match existing apigee-v2.yaml layout) --------
-  ROOT_TEMPLATE_SCRIPTS:   pipeline-template/scripts
-  APIGEE_TEMPLATE_SCRIPTS: pipeline-template/scripts/apigee
+  # -------- Paths --------
+  ROOT_TEMPLATE_SCRIPTS:    pipeline-template/scripts
+  APIGEE_TEMPLATE_SCRIPTS:  pipeline-template/scripts/apigee
   PROMOTE_TEMPLATE_SCRIPTS: pipeline-template/scripts/apigee/stages/promote
 
 jobs:
@@ -123,35 +58,62 @@ jobs:
       - name: Setup stage
         run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/setup.sh"
 
+      # -------- FORGESPHERE SERVICE TOKEN (existing pattern) --------
+      - name: Get ForgeSphere service token
+        id: service-token
+        run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/service_token.sh"
+
+      # -------- LOAD FORGESPHERE CICD CONFIG --------
+      - name: Load ForgeSphere CICD configuration
+        id: config
+        env:
+          SERVICE_ACCESS_TOKEN: ${{ steps.service-token.outputs.access_token }}
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/forgesphere_config.sh"
+
+      # -------- RESOLVE RUNTIME CONFIG --------
+      - name: Resolve runtime configuration
+        id: runtime
+        env:
+          APIGEE_ORG:           ${{ steps.config.outputs.apigee_org }}
+          APIGEE_ENV:           ${{ steps.config.outputs.apigee_env }}
+          RESOURCE_TYPE:        ${{ steps.config.outputs.resourcetype }}
+          TOKEN_SERVICE_URL:    ${{ steps.config.outputs.token_service_url }}
+          CICD_CONFIG_URL:      ${{ steps.config.outputs.cicd_config_url }}
+          NEXUS_URL:            ${{ steps.config.outputs.nexus_url }}
+          NEXUS_USERNAME:       ${{ steps.config.outputs.nexus_username }}
+          NEXUS_PASSWORD:       ${{ steps.config.outputs.nexus_password }}
+          NEXUS_REPOSITORY:     ${{ steps.config.outputs.nexus_repository }}
+          NEXUS_ARTIFACT_NAME:  ${{ steps.config.outputs.nexus_artifact_name }}
+        run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/resolve_runtime_config.sh"
+
       # -------- VALIDATION (promote-specific) --------
       - name: Validation stage
         id: validate
         run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/validation.sh"
 
-      # -------- FORGESPHERE CONFIG (existing) --------
-      - name: ForgeSphere configuration stage
-        id: config
-        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/forgesphere_config.sh"
-
       # -------- NEXUS DOWNLOAD (promote-specific) --------
       - name: Nexus download stage
         id: nexus
         env:
-          NEXUS_URL:        ${{ steps.config.outputs.nexus_url }}
-          NEXUS_USERNAME:   ${{ steps.config.outputs.nexus_username }}
-          NEXUS_PASSWORD:   ${{ steps.config.outputs.nexus_password }}
-          NEXUS_REPOSITORY: ${{ steps.config.outputs.nexus_repository }}
+          NEXUS_URL:        ${{ steps.runtime.outputs.nexus_url }}
+          NEXUS_USERNAME:   ${{ steps.runtime.outputs.nexus_username }}
+          NEXUS_PASSWORD:   ${{ steps.runtime.outputs.nexus_password }}
+          NEXUS_REPOSITORY: ${{ steps.runtime.outputs.nexus_repository }}
         run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/nexus_download.sh"
 
       # -------- APIGEE TOKEN (promote-specific) --------
       - name: Apigee token stage
         id: token
+        env:
+          TOKEN_SERVICE_URL: ${{ steps.runtime.outputs.token_service_url }}
         run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/apigee_token.sh"
 
       # -------- IMPORT (promote-specific) --------
       - name: Import stage
         id: import
         env:
+          APIGEE_ORG:    ${{ steps.runtime.outputs.apigee_org }}
+          RESOURCE_TYPE: ${{ steps.runtime.outputs.resourcetype }}
           ACCESS_TOKEN:  ${{ steps.token.outputs.access_token }}
           ARTIFACT_FILE: ${{ steps.nexus.outputs.artifact_file }}
         run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/import.sh"
@@ -159,22 +121,31 @@ jobs:
       # -------- DEPLOY (promote-specific) --------
       - name: Deploy stage
         env:
-          ACCESS_TOKEN: ${{ steps.token.outputs.access_token }}
-          REVISION:     ${{ steps.import.outputs.revision }}
+          APIGEE_ORG:    ${{ steps.runtime.outputs.apigee_org }}
+          APIGEE_ENV:    ${{ steps.runtime.outputs.apigee_env }}
+          RESOURCE_TYPE: ${{ steps.runtime.outputs.resourcetype }}
+          ACCESS_TOKEN:  ${{ steps.token.outputs.access_token }}
+          REVISION:      ${{ steps.import.outputs.revision }}
         run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/deploy.sh"
 
       # -------- VERIFY (promote-specific) --------
       - name: Verify stage
         env:
-          ACCESS_TOKEN: ${{ steps.token.outputs.access_token }}
-          REVISION:     ${{ steps.import.outputs.revision }}
+          APIGEE_ORG:    ${{ steps.runtime.outputs.apigee_org }}
+          APIGEE_ENV:    ${{ steps.runtime.outputs.apigee_env }}
+          RESOURCE_TYPE: ${{ steps.runtime.outputs.resourcetype }}
+          ACCESS_TOKEN:  ${{ steps.token.outputs.access_token }}
+          REVISION:      ${{ steps.import.outputs.revision }}
         run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/verify.sh"
 
       # -------- SUMMARY (promote-specific) --------
       - name: Summary
         if: success()
         env:
-          REVISION: ${{ steps.import.outputs.revision }}
+          APIGEE_ORG:    ${{ steps.runtime.outputs.apigee_org }}
+          APIGEE_ENV:    ${{ steps.runtime.outputs.apigee_env }}
+          RESOURCE_TYPE: ${{ steps.runtime.outputs.resourcetype }}
+          REVISION:      ${{ steps.import.outputs.revision }}
         run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/summary.sh"
 
       # -------- CLEANUP (existing) --------

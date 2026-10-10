@@ -2,16 +2,17 @@
 """
 Load ForgeSphere CI/CD Configuration.
 
-Fetches the effective CI/CD configuration of the application for one resource type and environment using the
-ForgeSphere service access token, validates required fields, masks secrets in GitHub Actions logs, and writes outputs
-to $GITHUB_OUTPUT.
+Fetches the effective CI/CD configuration of the application for one resource
+type and environment using the ForgeSphere service access token, validates
+required fields, masks secrets in GitHub Actions logs, and writes outputs to
+$GITHUB_OUTPUT.
 
 Environment variables:
     CICD_CONFIG_URL       ForgeSphere CI/CD base URL (https://forgesphere.probestack.io/cicd-automation)
     CICD_CONFIG_ID        cicd_profile_id: the application's id
     SERVICE_ACCESS_TOKEN  ForgeSphere Bearer access token
     DEPLOY_PROXY          Apigee proxy name / Sonar project key
-    RESOURCE_TYPE         apis or sharedflows (ForgeSphere understands the names api-development uses)
+    RESOURCE_TYPE         apis or sharedflows
     ENVIRONMENT           ForgeSphere environment the workflow is for (dev, qa, ...)
     APIGEE_ENV            Apigee environment, to pick that environment's deployment target (optional)
     GITHUB_OUTPUT         GitHub Actions output file
@@ -36,12 +37,11 @@ def mask(value: str) -> None:
         print(f"::add-mask::{value}")
 
 
-def text(value) -> str:
-    return "" if value is None else str(value)
-
-
 def base_url(value: str) -> str:
-    """The service's base URL; the old configuration address (.../v1/api/cicd-config) is understood too."""
+    """
+    The service's base URL. The old configuration address
+    (.../v1/api/cicd-config) is understood too.
+    """
     value = value.strip().rstrip("/")
     return value.split("/v1/api")[0] if "/v1/api" in value else value
 
@@ -101,7 +101,6 @@ def fetch_config(
             body = response.read()
 
     except urllib.error.HTTPError as exc:
-        # HTTPError is also a response, so read the response body.
         try:
             response_body = exc.read().decode("utf-8", errors="replace")
         except Exception:
@@ -156,7 +155,6 @@ def fetch_config(
         print("ERROR: ForgeSphere returned invalid JSON")
         print("Response:")
         print(body.decode("utf-8", errors="replace"))
-
         fail(f"Invalid JSON: {exc}")
 
     # The configuration is inside {"success", "data", "timestamp"}.
@@ -183,30 +181,19 @@ def write_outputs(outputs: dict, github_output: str | None) -> None:
                 for key, value in outputs.items():
                     if value is None:
                         value = ""
-
-                    output_file.write(
-                        f"{key}={value}\n"
-                    )
-
+                    output_file.write(f"{key}={value}\n")
         except OSError as exc:
             fail(f"Unable to write GitHub outputs: {exc}")
-
         return
 
-    # Local execution fallback.
-    # Do NOT print secrets.
     print(
-        "WARNING: GITHUB_OUTPUT is not set; "
-        "outputs will not be exported."
+        "WARNING: GITHUB_OUTPUT is not set; outputs will not be exported."
     )
 
     safe_outputs = {
         key: value
         for key, value in outputs.items()
-        if key not in {
-            "sonar_token",
-            "nexus_password",
-        }
+        if key not in {"sonar_token", "nexus_password"}
     }
 
     for key, value in safe_outputs.items():
@@ -220,10 +207,7 @@ def main() -> None:
 
     config_url = os.environ.get("CICD_CONFIG_URL", "").strip()
     config_id = os.environ.get("CICD_CONFIG_ID", "").strip()
-    service_access_token = os.environ.get(
-        "SERVICE_ACCESS_TOKEN",
-        "",
-    ).strip()
+    service_access_token = os.environ.get("SERVICE_ACCESS_TOKEN", "").strip()
     deploy_proxy = os.environ.get("DEPLOY_PROXY", "").strip()
     resource_type = os.environ.get("RESOURCE_TYPE", "").strip()
     environment_group = os.environ.get("ENVIRONMENT", "").strip().upper()
@@ -236,19 +220,14 @@ def main() -> None:
 
     if not config_url:
         fail("CICD_CONFIG_URL must be set")
-
     if not config_id:
         fail("CICD_CONFIG_ID must be set")
-
     if not service_access_token:
         fail("ForgeSphere service token is empty")
-
     if not deploy_proxy:
         fail("DEPLOY_PROXY must be set")
-
     if not resource_type:
         fail("RESOURCE_TYPE must be set (apis or sharedflows)")
-
     if not environment_group:
         fail(
             "ENVIRONMENT must be set "
@@ -281,10 +260,8 @@ def main() -> None:
     branches = (config.get("branchingStrategy") or {}).get("branches") or []
 
     for branch in branches:
-
         if not isinstance(branch, dict):
             continue
-
         if branch.get("tag") == "merge":
             merge_branch = branch.get("name")
             merge_tag = branch.get("tag")
@@ -305,18 +282,13 @@ def main() -> None:
     sonar_credentials = sonar.get("credentials") or {}
 
     sonar_host_url = sonar_configuration.get("baseUrl")
-
     sonar_token = sonar_credentials.get("token")
-
-    # Deploy proxy is used as the Sonar project key.
     sonar_project_key = deploy_proxy
 
     if not sonar_host_url:
         fail("SONAR_HOST_URL not configured")
-
     if not sonar_token:
         fail("SONAR_TOKEN not configured")
-
     if not sonar_project_key:
         fail("SONAR_PROJECT_KEY not configured")
 
@@ -326,18 +298,15 @@ def main() -> None:
 
     artifact = (config.get("tools") or {}).get("artifact") or {}
 
-    if text(artifact.get("providerType")).upper() != "NEXUS":
+    if str(artifact.get("providerType") or "").upper() != "NEXUS":
         artifact = {}
 
     nexus_configuration = artifact.get("configuration") or {}
     nexus_credentials = artifact.get("credentials") or {}
 
     nexus_url = nexus_configuration.get("baseUrl") or ""
-
     nexus_username = nexus_configuration.get("username") or ""
-
     nexus_password = nexus_credentials.get("password") or ""
-
     nexus_repository = nexus_configuration.get("repository") or ""
 
     # ------------------------------------------------
@@ -355,11 +324,11 @@ def main() -> None:
     target_configuration = deployment_target.get("configuration") or {}
     target_credentials = deployment_target.get("credentials") or {}
 
-    apigee_service_account_email = text(
-        target_configuration.get("serviceAccountEmail")
+    apigee_service_account_email = str(
+        target_configuration.get("serviceAccountEmail") or ""
     )
-    apigee_workload_identity_provider = text(
-        target_configuration.get("workloadIdentityProvider")
+    apigee_workload_identity_provider = str(
+        target_configuration.get("workloadIdentityProvider") or ""
     )
 
     missing_fields = [
@@ -390,10 +359,7 @@ def main() -> None:
                 else json.loads(raw_service_account)
             )
         except json.JSONDecodeError as exc:
-            fail(
-                "Invalid Apigee service account JSON: "
-                f"{exc}"
-            )
+            fail(f"Invalid Apigee service account JSON: {exc}")
 
     if not isinstance(apigee_service_account_data, dict):
         fail("Apigee service account JSON must contain a JSON object")
@@ -402,50 +368,26 @@ def main() -> None:
         "client_email",
         apigee_service_account_email,
     )
-    apigee_service_account_data[
-        "workload_identity_provider"
-    ] = apigee_workload_identity_provider
-
-    # RUNNER_TEMP is provided by GitHub Actions.
-    # Fall back to the system temp directory for local execution.
-    runner_temp = os.environ.get(
-        "RUNNER_TEMP",
-        "/tmp",
+    apigee_service_account_data["workload_identity_provider"] = (
+        apigee_workload_identity_provider
     )
 
+    runner_temp = os.environ.get("RUNNER_TEMP", "/tmp")
     apigee_service_account_file = os.path.join(
         runner_temp,
         "apigee-service-account.json",
     )
 
     try:
-        with open(
-            apigee_service_account_file,
-            "w",
-            encoding="utf-8",
-        ) as file:
-            json.dump(
-                apigee_service_account_data,
-                file,
-                indent=2,
-            )
+        with open(apigee_service_account_file, "w", encoding="utf-8") as file:
+            json.dump(apigee_service_account_data, file, indent=2)
 
         # Private-key file must not be world-readable.
-        os.chmod(
-            apigee_service_account_file,
-            0o600,
-        )
-
+        os.chmod(apigee_service_account_file, 0o600)
     except OSError as exc:
-        fail(
-            "Unable to create Apigee service account file: "
-            f"{exc}"
-        )
+        fail(f"Unable to create Apigee service account file: {exc}")
 
-    print(
-        "Apigee service account configured: "
-        f"{apigee_service_account_email}"
-    )
+    print(f"Apigee service account configured: {apigee_service_account_email}")
 
     # ------------------------------------------------
     # MASK SECRETS
@@ -470,15 +412,13 @@ def main() -> None:
         "nexus_username": nexus_username,
         "nexus_password": nexus_password,
         "nexus_repository": nexus_repository,
+
         "apigee_serviceAccountFile": apigee_service_account_file,
         "apigee_serviceAccountEmail": apigee_service_account_email,
         "apigee_workload_identity_provider": apigee_workload_identity_provider,
     }
 
-    write_outputs(
-        outputs=outputs,
-        github_output=github_output,
-    )
+    write_outputs(outputs=outputs, github_output=github_output)
 
     # ------------------------------------------------
     # SUMMARY
@@ -495,15 +435,8 @@ def main() -> None:
         f"Nexus Config : "
         f"{'configured' if nexus_url else 'not configured'}"
     )
-    print(
-        "Apigee Service Account: "
-        f"{apigee_service_account_email}"
-    )
-
-    print(
-        "Apigee Service Account File: "
-        f"{apigee_service_account_file}"
-    )
+    print(f"Apigee Service Account: {apigee_service_account_email}")
+    print(f"Apigee Service Account File: {apigee_service_account_file}")
     print("==========================================")
 
 
