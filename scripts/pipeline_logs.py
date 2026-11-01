@@ -48,7 +48,10 @@ import time
 from pathlib import Path
 from typing import Optional
 
-import requests
+try:
+    import requests
+except ImportError:  # pragma: no cover
+    requests = None  # type: ignore[assignment]
 
 
 TOKEN_REFRESH_SECONDS = 240
@@ -128,7 +131,13 @@ class PipelineLogger:
     def get_token(self) -> bool:
         if not self.configuration_available():
             return False
-
+        if requests is None:
+            print(
+                "pipeline-logs disabled; 'requests' module not installed "
+                "(ignored)",
+                file=sys.stderr,
+            )
+            return False
         try:
             response = requests.post(
                 self.token_issuer_url,
@@ -172,7 +181,10 @@ class PipelineLogger:
     def event(self, body: dict) -> bool:
         if not self.token:
             return False
-
+        
+        if requests is None:
+            return False
+        
         url = f"{self.pipeline_logs_url}/v1/api/events"
 
         try:

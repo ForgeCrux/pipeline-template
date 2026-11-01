@@ -130,6 +130,9 @@ jobs:
 
       - name: Select GitHub token
         id: token-select
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN:  ${{ secrets.GH_TOKEN }}
         run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/select_github_token.sh"
 
       # -------- LINT --------
@@ -156,10 +159,11 @@ jobs:
           java-version: '21'
 
       - name: Sonar stage
+        if: steps.config.outputs.sonar_host_url != ''
         env:
-          SONAR_HOST_URL:    ${{ steps.config.outputs.sonar_host_url }}
-          SONAR_TOKEN:       ${{ steps.config.outputs.sonar_token    != '' && steps.config.outputs.sonar_token    || '80c7767c7aa19b416d1d93d79e97f42d22f8ba0b' }}
-          SONAR_PROJECT_KEY: ${{ steps.config.outputs.sonar_project_key }}
+          SONAR_HOST_URL:    ${{ steps.config.outputs.sonar_host_url != '' && steps.config.outputs.sonar_host_url || 'https://sonarcloud.io' }}
+          SONAR_TOKEN:       ${{ steps.config.outputs.sonar_token != '' && steps.config.outputs.sonar_token || secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_KEY: ${{ steps.config.outputs.sonar_project_key != '' && steps.config.outputs.sonar_project_key || inputs.deploy_proxy }}
         run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/sonar.sh"
 
       # -------- VERSION --------
@@ -173,7 +177,6 @@ jobs:
 
       # -------- NEXUS --------
       - name: Nexus stage
-        if: steps.config.outputs.merge_branch == github.ref_name
         env:
           NEXUS_URL:        ${{ steps.config.outputs.nexus_url }}
           NEXUS_REPOSITORY: ${{ steps.config.outputs.nexus_repository }}

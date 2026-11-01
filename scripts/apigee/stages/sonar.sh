@@ -39,7 +39,6 @@ _install_scanner() {
 
   if [ -z "$extracted" ] || [ ! -x "${extracted}/bin/sonar-scanner" ]; then
     echo "ERROR: sonar-scanner binary not found after extraction" >&2
-    echo "  install_root=$install_root" >&2
     ls -la "$install_root" >&2 || true
     return 1
   fi
@@ -49,10 +48,8 @@ _install_scanner() {
 }
 
 _run_sonar() {
-  # ---- Java 21 enforcement ----------------------------------------
   if [ -z "${JAVA_HOME:-}" ] || [ ! -x "${JAVA_HOME}/bin/java" ]; then
     echo "ERROR: JAVA_HOME is not set or does not point to a Java install" >&2
-    echo "  JAVA_HOME=${JAVA_HOME:-<unset>}" >&2
     return 1
   fi
   export JAVA_HOME
@@ -63,10 +60,8 @@ _run_sonar() {
   echo "command -v java               : $(command -v java)"
   java -version 2>&1 | sed 's/^/  /'
 
-  # ---- Install / locate the CLI -----------------------------------
   _install_scanner
 
-  # ---- Run the scanner --------------------------------------------
   export SONAR_HOST_URL SONAR_TOKEN SONAR_PROJECT_KEY
   export SONAR_SCANNER_SKIP_JRE_PROVISIONING=true
 
@@ -77,4 +72,4 @@ _run_sonar() {
     -Dsonar.sources="$BUNDLE_DIR"
 }
 
-run_step SONAR SONAR_SCAN _run_sonar || true
+run_step_soft SONAR SONAR_SCAN _run_sonar

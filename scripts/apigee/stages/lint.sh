@@ -16,8 +16,8 @@ _js_lint() {
 }
 
 _lint_body() {
-  run_step LINT APIGEE_LINT _apigee_lint || true
-  run_step LINT JS_LINT     _js_lint     || true
+  run_step_soft LINT APIGEE_LINT _apigee_lint
+  run_step_soft LINT JS_LINT    _js_lint
 }
 
 stage_run LINT "Lint" _lint_body
