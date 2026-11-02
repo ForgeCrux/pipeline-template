@@ -1,0 +1,233 @@
+name: Reusable Microservice CI/CD
+
+on:
+  workflow_call:
+    inputs:
+      service_name:        { required: true,  type: string }
+      k8s_namespace:       { required: true,  type: string }
+      k8s_cluster:         { required: true,  type: string }
+      deploy_strategy:     { required: true,  type: string }   # helm | kustomize
+      node_version:        { required: false, default: '18', type: string }
+      dockerfile_path:     { required: false, default: './Dockerfile', type: string }
+      helm_chart_path:     { required: false, default: './charts', type: string }
+      kustomize_path:      { required: false, default: './k8s/overlays', type: string }
+      helm_values_file:    { required: false, default: '', type: string }
+      replica_count:       { required: false, default: '2', type: string }
+      health_check_path:   { required: false, default: '/health', type: string }
+      health_check_timeout:{ required: false, default: '120', type: string }
+      branch_name:         { required: false, type: string }
+      version:             { required: false, default: '', type: string }
+      cicd_config_url:     { required: false, default: 'https://forgesphere.probestack.io/cicd-automation', type: string }
+      # GitOps / ArgoCD — everything is read from ForgeSphere profile if blank.
+      gitops_repo_org:     { required: false, default: '', type: string }
+      gitops_repo_name:    { required: false, default: '', type: string }
+      argocd_app_name:     { required: false, default: '', type: string }
+      argocd_project:      { required: false, default: '', type: string }
+
+    secrets:
+      cicd_profile_id:                  { required: true }
+      GH_TOKEN:                         { required: true }
+      APP_ID:                           { required: true }
+      APP_PRIVATE_KEY:                  { required: true }
+      PROB_SERVICE_TOKEN_URL:           { required: true }
+      PROB_SERVICE_TOKEN_CLIENT_ID:     { required: true }
+      PROB_SERVICE_TOKEN_CLIENT_SECRET: { required: true }
+      PROB_SERVICE_TOKEN_TENANT_ID:     { required: true }
+      FLOW_CHANGE_ID:                   { required: false }
+      RESOURCE_ID:                      { required: false }
+      FLOW_TYPE:                        { required: false }
+      TOKEN_ISSUER_URL:                 { required: false }
+      ARGOCD_USERNAME:                  { required: false }
+      ARGOCD_PASSWORD:                  { required: false }
+      ARGOCD_TOKEN:                     { required: false }
+
+permissions:
+  contents: read
+
+env:
+  # -------- Pipeline Logs service --------
+  PIPELINE_LOGS_URL: 'https://forgesphere.probestack.io/pipeline-logs'
+  TOKEN_ISSUER_URL:  ${{ secrets.PROB_SERVICE_TOKEN_URL }}
+  CLIENT_ID:         ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
+  CLIENT_SECRET:     ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
+  ORGANIZATION_ID:   ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
+  PL_PIPELINE_TYPE:  'MICROSERVICE'
+
+  # -------- Token secrets for get_service_token.py --------
+  PROB_SERVICE_TOKEN_URL:           ${{ secrets.PROB_SERVICE_TOKEN_URL }}
+  PROB_SERVICE_TOKEN_CLIENT_ID:     ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
+  PROB_SERVICE_TOKEN_CLIENT_SECRET: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
+  PROB_SERVICE_TOKEN_TENANT_ID:     ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
+
+  # -------- Flow metadata --------
+  FLOW_TYPE:   ${{ secrets.FLOW_TYPE != '' && secrets.FLOW_TYPE || 'microservice' }}
+  RESOURCE_ID: ${{ secrets.RESOURCE_ID != '' && secrets.RESOURCE_ID || inputs.service_name }}
+
+  # -------- Inputs consumed by stage scripts --------
+  SERVICE_NAME:          ${{ inputs.service_name }}
+  K8S_NAMESPACE:         ${{ inputs.k8s_namespace }}
+  K8S_CLUSTER:           ${{ inputs.k8s_cluster }}
+  DEPLOY_STRATEGY:       ${{ inputs.deploy_strategy }}
+  NODE_VERSION:          ${{ inputs.node_version }}
+  DOCKERFILE_PATH:       ${{ inputs.dockerfile_path }}
+  HELM_CHART_PATH:       ${{ inputs.helm_chart_path }}
+  KUSTOMIZE_PATH:        ${{ inputs.kustomize_path }}
+  HELM_VALUES_FILE:      ${{ inputs.helm_values_file }}
+  REPLICA_COUNT:         ${{ inputs.replica_count }}
+  HEALTH_CHECK_PATH:     ${{ inputs.health_check_path }}
+  HEALTH_CHECK_TIMEOUT:  ${{ inputs.health_check_timeout }}
+  BRANCH_NAME:           ${{ inputs.branch_name }}
+  INPUT_VERSION:         ${{ inputs.version }}
+  GITOPS_REPO_ORG:       ${{ inputs.gitops_repo_org }}
+  GITOPS_REPO_NAME:      ${{ inputs.gitops_repo_name }}
+  ARGOCD_APP_NAME_OVERRIDE: ${{ inputs.argocd_app_name }}
+  ARGOCD_PROJECT_OVERRIDE:  ${{ inputs.argocd_project }}
+  ARGOCD_USERNAME:       ${{ secrets.ARGOCD_USERNAME }}
+  ARGOCD_PASSWORD:       ${{ secrets.ARGOCD_PASSWORD }}
+  ARGOCD_TOKEN:          ${{ secrets.ARGOCD_TOKEN }}
+
+  # -------- ForgeSphere config --------
+  CICD_CONFIG_URL: ${{ inputs.cicd_config_url }}
+  CICD_CONFIG_ID:  ${{ secrets.cicd_profile_id }}
+
+  # -------- Paths --------
+  ROOT_TEMPLATE_SCRIPTS:        pipeline-template/scripts
+  MICROSERVICE_TEMPLATE_SCRIPTS: pipeline-template/scripts/microservice
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy Microservice
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout application repository
+        uses: actions/checkout@v4
+
+      - name: Checkout pipeline template
+        uses: actions/checkout@v4
+        with:
+          repository: ForgeCrux/pipeline-template
+          ref: main
+          path: pipeline-template
+          token: ${{ secrets.GH_TOKEN }}
+
+      # -------- Resolve Flow Change ID BEFORE any stage --------
+      - name: Resolve Flow Change ID
+        env:
+          RAW_FLOW_CHANGE_ID: ${{ secrets.FLOW_CHANGE_ID }}
+        run: bash "${MICROSERVICE_TEMPLATE_SCRIPTS}/resolve_flow_change_id.sh"
+
+      # -------- SETUP --------
+      - name: Setup stage
+        id: setup
+        run: bash "${MICROSERVICE_TEMPLATE_SCRIPTS}/stages/setup.sh"
+
+      # -------- VALIDATION --------
+      - name: Validation stage
+        id: validate
+        run: bash "${MICROSERVICE_TEMPLATE_SCRIPTS}/stages/validation.sh"
+
+      # -------- FORGESPHERE CONFIGURATION --------
+      - name: ForgeSphere configuration stage
+        id: config
+        run: bash "${MICROSERVICE_TEMPLATE_SCRIPTS}/stages/forgesphere_config.sh"
+
+      # -------- GITHUB APP TOKEN --------
+      - name: Generate GitHub App token
+        id: app-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Select GitHub token
+        id: token-select
+        env:
+          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN:  ${{ secrets.GH_TOKEN }}
+        run: bash "${MICROSERVICE_TEMPLATE_SCRIPTS}/stages/select_github_token.sh"
+
+      # -------- LINT --------
+      - name: Lint stage
+        env:
+          GH_LINT_TOKEN: ${{ steps.token-select.outputs.token }}
+        run: bash "${MICROSERVICE_TEMPLATE_SCRIPTS}/stages/lint.sh"
+
+      # -------- SONAR --------
+      - name: Sonar stage
+        if: steps.config.outputs.sonar_host_url != ''
+        env:
+          SONAR_HOST_URL:    ${{ steps.config.outputs.sonar_host_url }}
+          SONAR_TOKEN:       ${{ steps.config.outputs.sonar_token }}
+          SONAR_PROJECT_KEY: ${{ steps.config.outputs.sonar_project_key }}
+        run: bash "${MICROSERVICE_TEMPLATE_SCRIPTS}/stages/sonar.sh"
+
+      # -------- VERSION --------
+      - name: Version stage
+        id: version
+        run: bash "${MICROSERVICE_TEMPLATE_SCRIPTS}/stages/version.sh"
+
+      # -------- BUILD --------
+      - name: Build and push image
+        id: build
+        env:
+          REGISTRY_URL:      ${{ steps.config.outputs.registry_url }}
+          REGISTRY_USERNAME: ${{ steps.config.outputs.registry_username }}
+          REGISTRY_PASSWORD: ${{ steps.config.outputs.registry_password }}
+          IMAGE_TAG:         ${{ steps.version.outputs.version }}
+        run: bash "${MICROSERVICE_TEMPLATE_SCRIPTS}/stages/build.sh"
+
+      # -------- GITOPS (create/update ops repo with helm chart) --------
+      - name: GitOps stage
+        id: gitops
+        env:
+          GH_TOKEN:           ${{ steps.token-select.outputs.token }}
+          REGISTRY_URL:       ${{ steps.config.outputs.registry_url }}
+          IMAGE_TAG:          ${{ steps.version.outputs.version }}
+          GITOPS_REPO_URL:    ${{ steps.config.outputs.gitops_repo_url }}
+          GITOPS_REPO_BRANCH: ${{ steps.config.outputs.gitops_repo_branch }}
+        run: bash "${MICROSERVICE_TEMPLATE_SCRIPTS}/stages/gitops.sh"
+
+      # -------- ARGOCD APP (add repo + create/update app) --------
+      - name: ArgoCD application stage
+        id: argocd-app
+        env:
+          ARGOCD_SERVER:   ${{ steps.config.outputs.argocd_server }}
+          ARGOCD_PROJECT:  ${{ steps.config.outputs.argocd_project }}
+          GITOPS_REPO_URL: ${{ steps.gitops.outputs.repo_url }}
+          GH_TOKEN:        ${{ steps.token-select.outputs.token }}
+        run: bash "${MICROSERVICE_TEMPLATE_SCRIPTS}/stages/argocd_app.sh"
+
+      # -------- ARGOCD SYNC --------
+      - name: ArgoCD sync stage
+        id: argocd-sync
+        env:
+          ARGOCD_SERVER: ${{ steps.config.outputs.argocd_server }}
+        run: bash "${MICROSERVICE_TEMPLATE_SCRIPTS}/stages/argocd_sync.sh"
+
+      # -------- VERIFY --------
+      - name: Verify stage
+        id: verify
+        env:
+          WORKLOAD_IDENTITY_PROVIDER: ${{ steps.config.outputs.workload_identity_provider }}
+          SERVICE_ACCOUNT:            ${{ steps.config.outputs.service_account }}
+          GKE_LOCATION:               ${{ steps.config.outputs.gke_location }}
+        run: bash "${MICROSERVICE_TEMPLATE_SCRIPTS}/stages/verify.sh"
+
+      # -------- CLEANUP --------
+      - name: Cleanup
+        if: always()
+        run: bash "${MICROSERVICE_TEMPLATE_SCRIPTS}/stages/cleanup.sh"
+
+      # -------- FINAL STATUS --------
+      - name: Final status
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: bash "${MICROSERVICE_TEMPLATE_SCRIPTS}/stages/final_status.sh"
