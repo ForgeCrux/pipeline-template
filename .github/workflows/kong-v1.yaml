@@ -114,7 +114,7 @@ jobs:
         env:
           SERVICE_ACCESS_TOKEN: ${{ steps.service-token.outputs.access_token }}
           ENVIRONMENT:          ${{ inputs.environment }}
-        run: bash "${KONG_TEMPLATE_SCRIPTS}/stages/load_cicd_config.sh"
+        run: bash "${KONG_TEMPLATE_SCRIPTS}/stages/load_cicd_configs.sh"
 
       # -------- INSTALL DECK --------
       - name: Install decK
