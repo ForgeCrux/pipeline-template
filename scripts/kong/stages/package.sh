@@ -24,4 +24,4 @@ EOF
   ls -lh "kong-${DEPLOY_PROXY}-${ARTIFACT_VERSION}.tar.gz" "kong-${DEPLOY_PROXY}-${ARTIFACT_VERSION}.sha256"
 }
 
-run_step PACKAGE PACKAGE _package
+stage_run KONG_PACKAGE PACKAGE _package

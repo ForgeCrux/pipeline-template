@@ -14,4 +14,4 @@ _upload() {
   echo "Nexus upload successful"
 }
 
-run_step NEXUS UPLOAD _upload
+stage_run KONG_NEXUS UPLOAD _upload

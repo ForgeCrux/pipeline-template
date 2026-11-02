@@ -14,4 +14,4 @@ _diff() {
     "$KONG_CONFIG_PATH" || true
 }
 
-run_step DIFF DIFF _diff
+stage_run KONG_DIFF "Diff" _diff

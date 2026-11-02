@@ -16,4 +16,4 @@ _verify() {
   cat kong-state.json
 }
 
-run_step VERIFY VERIFY _verify
+stage_run KONG_DUMP "Verify" _verify

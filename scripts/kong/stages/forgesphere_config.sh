@@ -35,4 +35,4 @@ _forgesphere_body() {
   echo "kong_pat_token=$kong_pat" >> "$GITHUB_OUTPUT"
 }
 
-stage_run FORGESPHERE_CONFIGURATION "ForgeSphere Configuration" _forgesphere_body
+stage_run KONG_CONFIG "ForgeSphere Configuration" _forgesphere_body

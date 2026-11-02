@@ -23,4 +23,4 @@ _deploy() {
   return $rc
 }
 
-run_step DEPLOYMENT DEPLOY _deploy
+stage_run KONG_DEPLOY "Deployment" _deploy

@@ -47,6 +47,12 @@ env:
   ORGANIZATION_ID:   ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
   PL_PIPELINE_TYPE:  'KONG'
 
+  # -------- ForgeSphere token secrets (required by get_service_token.py) --------
+  PROB_SERVICE_TOKEN_URL:           ${{ secrets.PROB_SERVICE_TOKEN_URL }}
+  PROB_SERVICE_TOKEN_CLIENT_ID:     ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
+  PROB_SERVICE_TOKEN_CLIENT_SECRET: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
+  PROB_SERVICE_TOKEN_TENANT_ID:     ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
+
   # -------- Flow / trigger metadata --------
   FLOW_TYPE:   ${{ secrets.FLOW_TYPE != '' && secrets.FLOW_TYPE || 'kong' }}
   RESOURCE_ID: ${{ secrets.RESOURCE_ID != '' && secrets.RESOURCE_ID || inputs.deploy_proxy }}
@@ -93,11 +99,14 @@ jobs:
           ref: main
           path: pipeline-template
 
-      # -------- SETUP --------
-      - name: Setup stage
-        id: setup
+      # -------- Flow ID must be resolved BEFORE any stage runs --------
+      - name: Resolve Flow Change ID
         env:
           RAW_FLOW_CHANGE_ID: ${{ secrets.FLOW_CHANGE_ID }}
+        run: bash "${KONG_TEMPLATE_SCRIPTS}/resolve_flow_change_id.sh"
+
+      # -------- SETUP --------
+      - name: Setup stage
         run: bash "${KONG_TEMPLATE_SCRIPTS}/stages/setup.sh"
 
       # -------- FORGESPHERE CONFIGURATION --------

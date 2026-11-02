@@ -13,4 +13,4 @@ _version() {
   echo "Artifact version: $version"
 }
 
-run_step VERSION CALCULATE_VERSION _version
+stage_run KONG_PACKAGE ARTIFACT_VERSION _version

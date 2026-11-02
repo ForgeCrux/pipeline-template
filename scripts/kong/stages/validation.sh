@@ -14,4 +14,4 @@ _validate() {
     "$KONG_CONFIG_PATH" 2>&1 | tee validate-out.txt
 }
 
-run_step VALIDATION VALIDATE _validate
+stage_run KONG_VALIDATE "Validation" _validate
