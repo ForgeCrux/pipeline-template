@@ -7,7 +7,7 @@ _get_service_token() {
 }
 
 _load_cicd_config() {
-  python3 "${_SCRIPTS_DIR}/load_cicd_config.py"
+  python3 "${_SCRIPTS_DIR}/load_cicd_configs.py"
 }
 
 _forgesphere_body() {

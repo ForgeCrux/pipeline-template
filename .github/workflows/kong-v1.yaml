@@ -52,7 +52,7 @@ env:
   PL_PIPELINE_TYPE:  'KONG'
 
   # -------- Flow metadata --------
-  FLOW_TYPE:   ${{ secrets.FLOW_TYPE != '' && secrets.FLOW_TYPE || 'kong-services' }}
+  FLOW_TYPE:   ${{ secrets.FLOW_TYPE != '' && secrets.FLOW_TYPE || 'kong' }}
   RESOURCE_ID: ${{ secrets.RESOURCE_ID != '' && secrets.RESOURCE_ID || inputs.deploy_proxy }}
 
   # -------- Inputs consumed by stage scripts --------
