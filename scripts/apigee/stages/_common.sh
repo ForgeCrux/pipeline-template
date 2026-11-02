@@ -11,6 +11,16 @@ _LOGS_PY="${_SCRIPTS_DIR}/pipeline_logs.py"
 
 export _STAGES_DIR _APIGEE_DIR _SCRIPTS_DIR _LOGS_PY
 
+# ----- Normalize credential env vars (issue: TOKEN unbound) ------
+set +u
+if [ -z "${TOKEN:-}" ] && [ -n "${ACCESS_TOKEN:-}" ]; then
+  export TOKEN="$ACCESS_TOKEN"
+fi
+if [ -z "${ACCESS_TOKEN:-}" ] && [ -n "${TOKEN:-}" ]; then
+  export ACCESS_TOKEN="$TOKEN"
+fi
+set -u
+
 # Tracks whether we are inside a stage_run body. Read by run_step/run_step_soft.
 _IN_STAGE="${_IN_STAGE:-0}"
 
