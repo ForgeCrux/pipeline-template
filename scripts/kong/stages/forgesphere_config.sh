@@ -12,7 +12,7 @@ _load_config() {
   [ -n "$token" ] || { echo "ERROR: service token empty" >&2; return 1; }
   
   export SERVICE_ACCESS_TOKEN="$token"
-  python3 "${_SCRIPTS_DIR}/load_kong_config.py"
+  python3 "${_SCRIPTS_DIR}/load_kong_configs.py"
 }
 
 _forgesphere_body() {
