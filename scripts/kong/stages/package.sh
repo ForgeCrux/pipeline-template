@@ -19,14 +19,9 @@ _package() {
 }
 EOF
 
-  tar -czf "kong-${DEPLOY_PROXY}-${ARTIFACT_VERSION}.tar.gz" \
-    -C nexus-artifact kong-state.json metadata.json
-
-  sha256sum "kong-${DEPLOY_PROXY}-${ARTIFACT_VERSION}.tar.gz" \
-    > "kong-${DEPLOY_PROXY}-${ARTIFACT_VERSION}.sha256"
-
-  ls -lh "kong-${DEPLOY_PROXY}-${ARTIFACT_VERSION}.tar.gz" \
-         "kong-${DEPLOY_PROXY}-${ARTIFACT_VERSION}.sha256"
+  tar -czf "kong-${DEPLOY_PROXY}-${ARTIFACT_VERSION}.tar.gz" -C nexus-artifact kong-state.json metadata.json
+  sha256sum "kong-${DEPLOY_PROXY}-${ARTIFACT_VERSION}.tar.gz" > "kong-${DEPLOY_PROXY}-${ARTIFACT_VERSION}.sha256"
+  ls -lh "kong-${DEPLOY_PROXY}-${ARTIFACT_VERSION}.tar.gz" "kong-${DEPLOY_PROXY}-${ARTIFACT_VERSION}.sha256"
 }
 
-run_step KONG_PACKAGE PACKAGE _package
+run_step PACKAGE PACKAGE _package

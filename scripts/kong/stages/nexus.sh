@@ -7,16 +7,11 @@ _upload() {
   local checksum="${artifact}.sha256"
   local base="${NEXUS_URL%/}/${NEXUS_REPOSITORY}/kong/${DEPLOY_PROXY}/${ARTIFACT_VERSION}"
 
-  curl --fail-with-body --silent --show-error \
-    --user "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" \
-    --upload-file "$artifact" "$base/$artifact"
-
-  curl --fail-with-body --silent --show-error \
-    --user "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" \
-    --upload-file "$checksum" "$base/$checksum"
+  curl --fail-with-body --silent --show-error --user "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" --upload-file "$artifact" "$base/$artifact"
+  curl --fail-with-body --silent --show-error --user "${NEXUS_USERNAME}:${NEXUS_PASSWORD}" --upload-file "$checksum" "$base/$checksum"
 
   echo "artifact_url=$base/$artifact" >> "$GITHUB_OUTPUT"
   echo "Nexus upload successful"
 }
 
-run_step KONG_NEXUS NEXUS_UPLOAD _upload
+run_step NEXUS UPLOAD _upload

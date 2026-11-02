@@ -3,17 +3,15 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 
 _validate() {
-  echo "Address:       $KONNECT_ADDR"
-  echo "Control Plane: $CONTROL_PLANE_NAME"
-  echo "Mode:          $DECK_MODE"
-  echo "Token:         ********"
+  export KONNECT_TOKEN="${CONFIG_KONNECT_PAT:-}"
+  export KONNECT_ADDR="${CONFIG_KONNECT_ADDR:-}"
+  export CONTROL_PLANE_NAME="${CONFIG_CONTROL_PLANE:-}"
 
   deck gateway validate \
     --konnect-token "$KONNECT_TOKEN" \
     --konnect-addr "$KONNECT_ADDR" \
     --konnect-control-plane-name "$CONTROL_PLANE_NAME" \
-    "$KONG_CONFIG_PATH" \
-    2>&1 | tee validate-out.txt
+    "$KONG_CONFIG_PATH" 2>&1 | tee validate-out.txt
 }
 
-run_step KONG_VALIDATE VALIDATE _validate
+run_step VALIDATION VALIDATE _validate
