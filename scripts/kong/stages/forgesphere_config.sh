@@ -12,38 +12,15 @@ _load_config() {
   [ -n "$token" ] || { echo "ERROR: service token empty" >&2; return 1; }
   
   export SERVICE_ACCESS_TOKEN="$token"
-  python3 "${_SCRIPTS_DIR}/load_kong_configs.py"
-}
-
-stage_run() {
-  local stage="$1"
-  local title="$2"
-  shift 2
-
-  echo "::group::${title}"
-  emit_event "$stage" STAGE_STARTED RUNNING "${title} stage started"
-  log_line   "$stage" STAGE_STARTED "${title} stage started"
-
-  # Subshell + set -e so stage failures propagate.
-  ( set -e; "$@" )
-  local result=$?
-
-  local status="COMPLETED"
-  local message="${title} stage completed"
-  if [ "$result" -ne 0 ]; then
-    status="FAILED"
-    message="${title} stage failed (exit=$result)"
-  fi
-
-  log_line   "$stage" STAGE_COMPLETED "$message"
-  emit_event "$stage" STAGE_COMPLETED "$status" "$message"
-  echo "::endgroup::"
-  return "$result"
+  
+  # FIXED: Removed the 's' from load_kong_configs.py
+  python3 "${_SCRIPTS_DIR}/load_kong_config.py"
 }
 
 _forgesphere_body() {
-  run_step FORGESPHERE_CONFIGURATION GET_SERVICE_TOKEN _get_token
-  run_step FORGESPHERE_CONFIGURATION LOAD_CICD_CONFIG _load_config
+  # FIXED: Changed FORGESPHERE_CONFIGURATION to KONG_CONFIG
+  run_step KONG_CONFIG GET_SERVICE_TOKEN _get_token
+  run_step KONG_CONFIG LOAD_CICD_CONFIG _load_config
   
   # Extract Kong config values to GITHUB_OUTPUT for workflow use
   local kong_host
