@@ -14,7 +14,7 @@ on:
       helm_values_file:    { required: false, default: '', type: string }
       replica_count:       { required: false, default: '2', type: string }
       health_check_path:   { required: false, default: '/health', type: string }
-      health_check_timeout:{ required: false, default: '120', type: string }
+      health_check_timeout:  { required: false, default: '120', type: string }
       branch_name:         { required: false, type: string }
       version:             { required: false, default: '', type: string }
       cicd_config_url:     { required: false, default: 'https://forgesphere.probestack.io/cicd-automation', type: string }
