@@ -92,7 +92,7 @@ env:
 
   # -------- Paths --------
   ROOT_TEMPLATE_SCRIPTS:        pipeline-template/scripts
-  MICROSERVICE_TEMPLATE_SCRIPTS: pipeline-template/scripts/microservice
+  MICROSERVICE_TEMPLATE_SCRIPTS: pipeline-template/scripts/microservices
 
 jobs:
   build-and-deploy:
