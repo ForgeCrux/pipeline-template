@@ -47,6 +47,7 @@ env:
   CLIENT_ID:         ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
   CLIENT_SECRET:     ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
   ORGANIZATION_ID:   ${{ inputs.organization_id != '' && inputs.organization_id || secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
+  FLOW_TYPE:         ${{ secrets.FLOW_TYPE != '' && secrets.FLOW_TYPE || 'apis' }}
   PL_PIPELINE_TYPE:  'APIGEE'
   
   # -------- Token secrets for stage scripts --------
