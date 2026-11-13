@@ -34,13 +34,13 @@ on:
       FLOW_CHANGE_ID:                   { required: false }
       FLOW_TYPE:                        { required: false }
       RESOURCE_ID:                      { required: false }
- 
 
 permissions:
   contents: read
   actions: write
 
 env:
+  # -------- Pipeline Logs service --------
   PIPELINE_LOGS_URL: 'https://forgesphere.probestack.io/pipeline-logs'
   TOKEN_ISSUER_URL:  ${{ secrets.PROB_SERVICE_TOKEN_URL }}
   CLIENT_ID:         ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
@@ -48,19 +48,13 @@ env:
   ORGANIZATION_ID:   ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
   PL_PIPELINE_TYPE:  'APIGEE'
   
-  # Expose token secrets to the scripts
+  # -------- Token secrets for stage scripts --------
   PROB_SERVICE_TOKEN_URL:           ${{ secrets.PROB_SERVICE_TOKEN_URL }}
   PROB_SERVICE_TOKEN_CLIENT_ID:     ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
   PROB_SERVICE_TOKEN_CLIENT_SECRET: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
   PROB_SERVICE_TOKEN_TENANT_ID:     ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
 
-  # Expose token secrets to the stage scripts
-  PROB_SERVICE_TOKEN_URL:           ${{ secrets.PROB_SERVICE_TOKEN_URL }}
-  PROB_SERVICE_TOKEN_CLIENT_ID:     ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
-  PROB_SERVICE_TOKEN_CLIENT_SECRET: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
-  PROB_SERVICE_TOKEN_TENANT_ID:     ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
-
-  # -------- Inputs (only what the operator chooses) --------
+  # -------- Inputs --------
   OPERATION:           ${{ inputs.operation }}
   DEPLOY_PROXY:        ${{ inputs.deploy_proxy }}
   NEXUS_VERSION:       ${{ inputs.nexus_version }}
@@ -92,16 +86,13 @@ jobs:
       - name: Resolve Flow Change ID
         run: bash "${APIGEE_TEMPLATE_SCRIPTS}/resolve_flow_change_id.sh"
 
-      # -------- SETUP --------
       - name: Setup stage
         run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/setup.sh"
 
-      # -------- FORGESPHERE SERVICE TOKEN --------
       - name: Get ForgeSphere service token
         id: service-token
         run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/service_token.sh"
 
-      # -------- LOAD FORGESPHERE CICD CONFIG --------
       - name: Load ForgeSphere CICD configuration
         id: config
         env:
@@ -116,7 +107,6 @@ jobs:
         id: validate
         run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/validation.sh"
 
-      # -------- NEXUS DOWNLOAD --------
       - name: Nexus download stage
         id: nexus
         env:
@@ -126,14 +116,12 @@ jobs:
           NEXUS_REPOSITORY: ${{ steps.runtime.outputs.nexus_repository }}
         run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/nexus_download.sh"
 
-      # -------- APIGEE TOKEN --------
       - name: Apigee token stage
         id: token
         env:
           TOKEN_SERVICE_URL: ${{ steps.runtime.outputs.token_service_url }}
         run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/apigee_token.sh"
 
-      # -------- IMPORT --------
       - name: Import stage
         id: import
         env:
@@ -141,33 +129,28 @@ jobs:
           ARTIFACT_FILE: ${{ steps.nexus.outputs.artifact_file }}
         run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/import.sh"
 
-      # -------- DEPLOY --------
       - name: Deploy stage
         env:
           ACCESS_TOKEN: ${{ steps.token.outputs.access_token }}
           REVISION:     ${{ steps.import.outputs.revision }}
         run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/deploy.sh"
 
-      # -------- VERIFY --------
       - name: Verify stage
         env:
           ACCESS_TOKEN: ${{ steps.token.outputs.access_token }}
           REVISION:     ${{ steps.import.outputs.revision }}
         run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/verify.sh"
 
-      # -------- SUMMARY --------
       - name: Summary
         if: success()
         env:
           REVISION: ${{ steps.import.outputs.revision }}
         run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/summary.sh"
 
-      # -------- CLEANUP --------
       - name: Cleanup
         if: always()
         run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/cleanup.sh"
 
-      # -------- FINAL STATUS --------
       - name: Final status
         if: always()
         env:
