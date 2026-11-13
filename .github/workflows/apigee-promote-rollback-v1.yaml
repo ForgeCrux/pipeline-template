@@ -105,7 +105,7 @@ jobs:
       - name: Load ForgeSphere CICD configuration
         id: config
         env:
-          SERVICE_ACCESS_TOKEN: ${{ secrets.PROB_SERVICE_TOKEN_URL }}
+          SERVICE_ACCESS_TOKEN: ${{ steps.service-token.outputs.access_token }}
         run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/forgesphere_config.sh"
 
       - name: Resolve runtime configuration
