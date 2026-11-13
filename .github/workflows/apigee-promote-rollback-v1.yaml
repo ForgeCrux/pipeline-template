@@ -12,6 +12,7 @@ on:
       resourcetype:         { required: false, default: "", type: string }
       nexus_artifact_name:  { required: false, default: "", type: string }
       flow_change_id:       { required: false, default: "", type: string }
+      organization_id:      { required: false, default: "", type: string, description: "Organization/Tenant ID override" }
 
   workflow_call:
     inputs:
@@ -45,7 +46,7 @@ env:
   TOKEN_ISSUER_URL:  ${{ secrets.PROB_SERVICE_TOKEN_URL }}
   CLIENT_ID:         ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
   CLIENT_SECRET:     ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
-  ORGANIZATION_ID:   ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
+  ORGANIZATION_ID:   ${{ inputs.organization_id != '' && inputs.organization_id || secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
   PL_PIPELINE_TYPE:  'APIGEE'
   
   # -------- Token secrets for stage scripts --------
