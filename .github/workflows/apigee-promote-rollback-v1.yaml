@@ -1,0 +1,175 @@
+name: Reusable Apigee Promote / Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:            { required: true,  type: choice, options: [promote, rollback] }
+      deploy_proxy:         { required: true,  type: string }
+      nexus_version:        { required: true,  type: string }
+      cicd_profile_id:      { required: true,  type: string }
+      apigee_org:           { required: false, default: "", type: string }
+      apigee_env:           { required: false, default: "", type: string }
+      resourcetype:         { required: false, default: "", type: string }
+      nexus_artifact_name:  { required: false, default: "", type: string }
+      flow_change_id:       { required: false, default: "", type: string }
+
+  workflow_call:
+    inputs:
+      operation:            { required: true,  type: string }
+      deploy_proxy:         { required: true,  type: string }
+      nexus_version:        { required: true,  type: string }
+      cicd_profile_id:      { required: true,  type: string }
+      apigee_org:           { required: false, default: "", type: string }
+      apigee_env:           { required: false, default: "", type: string }
+      resourcetype:         { required: false, default: "", type: string }
+      nexus_artifact_name:  { required: false, default: "", type: string }
+      flow_change_id:       { required: false, default: "", type: string }
+
+    secrets:
+      PROB_SERVICE_TOKEN_URL:           { required: true }
+      PROB_SERVICE_TOKEN_CLIENT_ID:     { required: true }
+      PROB_SERVICE_TOKEN_CLIENT_SECRET: { required: true }
+      PROB_SERVICE_TOKEN_TENANT_ID:     { required: true }
+      CICD_PROFILE_ID:                  { required: false }
+      FLOW_CHANGE_ID:                   { required: false }
+      FLOW_TYPE:                        { required: false }
+      RESOURCE_ID:                      { required: false }
+ 
+
+permissions:
+  contents: read
+  actions: write
+
+env:
+  PIPELINE_LOGS_URL: 'https://forgesphere.probestack.io/pipeline-logs'
+  TOKEN_ISSUER_URL:  ${{ secrets.PROB_SERVICE_TOKEN_URL }}
+  CLIENT_ID:         ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
+  CLIENT_SECRET:     ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
+  ORGANIZATION_ID:   ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
+  PL_PIPELINE_TYPE:  'APIGEE'
+  
+  # Expose token secrets to the scripts
+  PROB_SERVICE_TOKEN_URL:           ${{ secrets.PROB_SERVICE_TOKEN_URL }}
+  PROB_SERVICE_TOKEN_CLIENT_ID:     ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
+  PROB_SERVICE_TOKEN_CLIENT_SECRET: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
+  PROB_SERVICE_TOKEN_TENANT_ID:     ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
+
+  # Expose token secrets to the stage scripts
+  PROB_SERVICE_TOKEN_URL:           ${{ secrets.PROB_SERVICE_TOKEN_URL }}
+  PROB_SERVICE_TOKEN_CLIENT_ID:     ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_ID }}
+  PROB_SERVICE_TOKEN_CLIENT_SECRET: ${{ secrets.PROB_SERVICE_TOKEN_CLIENT_SECRET }}
+  PROB_SERVICE_TOKEN_TENANT_ID:     ${{ secrets.PROB_SERVICE_TOKEN_TENANT_ID }}
+
+  # -------- Inputs (only what the operator chooses) --------
+  OPERATION:           ${{ inputs.operation }}
+  DEPLOY_PROXY:        ${{ inputs.deploy_proxy }}
+  NEXUS_VERSION:       ${{ inputs.nexus_version }}
+  CICD_CONFIG_ID:      ${{ inputs.cicd_profile_id != '' && inputs.cicd_profile_id || secrets.CICD_PROFILE_ID }}
+  RAW_FLOW_CHANGE_ID:  ${{ inputs.flow_change_id != '' && inputs.flow_change_id || secrets.FLOW_CHANGE_ID }}
+
+  # -------- Paths --------
+  ROOT_TEMPLATE_SCRIPTS:    pipeline-template/scripts
+  APIGEE_TEMPLATE_SCRIPTS:  pipeline-template/scripts/apigee
+  PROMOTE_TEMPLATE_SCRIPTS: pipeline-template/scripts/apigee/stages/promote
+
+jobs:
+  promote-rollback:
+    name: ${{ inputs.operation }} ${{ inputs.deploy_proxy }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout application repository
+        uses: actions/checkout@v4
+
+      - name: Checkout pipeline template
+        uses: actions/checkout@v4
+        with:
+          repository: ForgeCrux/pipeline-template
+          ref: main
+          path: pipeline-template
+
+      - name: Resolve Flow Change ID
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/resolve_flow_change_id.sh"
+
+      # -------- SETUP --------
+      - name: Setup stage
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/setup.sh"
+
+      # -------- FORGESPHERE SERVICE TOKEN --------
+      - name: Get ForgeSphere service token
+        id: service-token
+        run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/service_token.sh"
+
+      # -------- LOAD FORGESPHERE CICD CONFIG --------
+      - name: Load ForgeSphere CICD configuration
+        id: config
+        env:
+          SERVICE_ACCESS_TOKEN: ${{ secrets.PROB_SERVICE_TOKEN_URL }}
+        run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/forgesphere_config.sh"
+
+      - name: Resolve runtime configuration
+        id: runtime
+        run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/resolve_runtime_config.sh"
+
+      - name: Validation stage
+        id: validate
+        run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/validation.sh"
+
+      # -------- NEXUS DOWNLOAD --------
+      - name: Nexus download stage
+        id: nexus
+        env:
+          NEXUS_URL:        ${{ steps.runtime.outputs.nexus_url }}
+          NEXUS_USERNAME:   ${{ steps.runtime.outputs.nexus_username }}
+          NEXUS_PASSWORD:   ${{ steps.runtime.outputs.nexus_password }}
+          NEXUS_REPOSITORY: ${{ steps.runtime.outputs.nexus_repository }}
+        run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/nexus_download.sh"
+
+      # -------- APIGEE TOKEN --------
+      - name: Apigee token stage
+        id: token
+        env:
+          TOKEN_SERVICE_URL: ${{ steps.runtime.outputs.token_service_url }}
+        run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/apigee_token.sh"
+
+      # -------- IMPORT --------
+      - name: Import stage
+        id: import
+        env:
+          ACCESS_TOKEN:  ${{ steps.token.outputs.access_token }}
+          ARTIFACT_FILE: ${{ steps.nexus.outputs.artifact_file }}
+        run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/import.sh"
+
+      # -------- DEPLOY --------
+      - name: Deploy stage
+        env:
+          ACCESS_TOKEN: ${{ steps.token.outputs.access_token }}
+          REVISION:     ${{ steps.import.outputs.revision }}
+        run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/deploy.sh"
+
+      # -------- VERIFY --------
+      - name: Verify stage
+        env:
+          ACCESS_TOKEN: ${{ steps.token.outputs.access_token }}
+          REVISION:     ${{ steps.import.outputs.revision }}
+        run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/verify.sh"
+
+      # -------- SUMMARY --------
+      - name: Summary
+        if: success()
+        env:
+          REVISION: ${{ steps.import.outputs.revision }}
+        run: bash "${PROMOTE_TEMPLATE_SCRIPTS}/summary.sh"
+
+      # -------- CLEANUP --------
+      - name: Cleanup
+        if: always()
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/cleanup.sh"
+
+      # -------- FINAL STATUS --------
+      - name: Final status
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: bash "${APIGEE_TEMPLATE_SCRIPTS}/stages/final_status.sh"
